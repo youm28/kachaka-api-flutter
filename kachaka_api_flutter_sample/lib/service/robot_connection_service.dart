@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:grpc/grpc.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kachaka_api_flutter_sample/model/connection_options.dart';
 import 'package:kachaka_api_flutter_sample/repositories/kachaka/kachaka_repository.dart';
@@ -54,5 +56,24 @@ class RobotConnectionService {
               _ref.read(robotStoreProvider.notifier).setRobotPose(res.pose),
           pollingChannelId,
         );
+  }
+
+  Future<void> getLocations() async {
+    try {
+      final response =
+          await _ref.read(kachakaRepositoryProvider).getLocations();
+      // 正常処理
+    } on GrpcError catch (e) {
+      if (e.code == StatusCode.cancelled) {
+        debugPrint('getLocations: リクエストがキャンセルされました - スキップします');
+        // キャンセルエラーは無視して続行
+        return;
+      } else {
+        debugPrint('getLocations: gRPCエラー - ${e.code}: ${e.message}');
+        // その他のエラーは再試行または適切な処理
+      }
+    } catch (e) {
+      debugPrint('getLocations: 予期しないエラー: $e');
+    }
   }
 }

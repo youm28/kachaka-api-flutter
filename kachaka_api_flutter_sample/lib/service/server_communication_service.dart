@@ -42,6 +42,8 @@ class ServerCommunicationService {
             final status = data['status'] as String?;
             if (status != null) {
               _ref.read(robotStatusProvider.notifier).state = status;
+              debugPrint('ロボットステータス更新: $status'); // デバッグログ追加
+
               if (status == 'queued') {
                 final queueLength = data['queue_length'] ?? 0;
                 _ref.read(queuedMessageProvider.notifier).state =
@@ -50,6 +52,18 @@ class ServerCommunicationService {
                 final destination = data['destination'] ?? '目的地';
                 _ref.read(queuedMessageProvider.notifier).state =
                     '「$destination」へ移動中です...';
+              } else if (status == 'idle') {
+                _ref.read(queuedMessageProvider.notifier).state = '';
+                debugPrint('ロボットがidle状態になりました - ボタンが再度有効になります');
+              } else if (status == 'error') {
+                _ref.read(queuedMessageProvider.notifier).state =
+                    'エラーが発生しました。再試行してください。';
+                debugPrint('ロボットがerror状態になりました - ボタンが再度有効になります');
+                // エラー状態でもボタンを有効にするため、5秒後にidleに戻す
+                Future.delayed(const Duration(seconds: 5), () {
+                  _ref.read(robotStatusProvider.notifier).state = 'idle';
+                  _ref.read(queuedMessageProvider.notifier).state = '';
+                });
               } else {
                 _ref.read(queuedMessageProvider.notifier).state = '';
               }

@@ -17,7 +17,11 @@ class HomeScreen extends HookConsumerWidget {
     // PCサーバーから受信したロボットの状態を監視
     final robotStatus = ref.watch(robotStatusProvider);
     final queuedMessage = ref.watch(queuedMessageProvider);
-    final isRobotBusy = robotStatus != 'idle';
+    // errorの場合もボタンを有効にするように修正
+    final isRobotBusy = robotStatus != 'idle' && robotStatus != 'error';
+
+    // デバッグログ追加
+    debugPrint('現在のロボットステータス: $robotStatus, ボタン無効: $isRobotBusy');
 
     // Kachakaロボット本体から取得した地図と場所の情報を監視
     final locations = ref
