@@ -14,6 +14,7 @@ class AppToRobotPollingService {
     void Function(T result) onSucceeded,
     String pollingChannelId, {
     Duration sleepWhenFailed = const Duration(seconds: 5),
+    Duration normalInterval = const Duration(seconds: 2), // 追加：通常時の間隔
   }) async {
     if (!_isActiveChannel(pollingChannelId)) {
       return;
@@ -22,9 +23,10 @@ class AppToRobotPollingService {
     try {
       final res = await getFunc.call();
       onSucceeded(res);
+      await Future.delayed(normalInterval); // 成功時も2秒待機
     } catch (e) {
       debugPrint("Exception Occurred when polling $getFunc, error: $e");
-      await Future.delayed(sleepWhenFailed);
+      await Future.delayed(sleepWhenFailed); // エラー時は5秒待機
     }
 
     polling(
@@ -32,6 +34,7 @@ class AppToRobotPollingService {
       onSucceeded,
       pollingChannelId,
       sleepWhenFailed: sleepWhenFailed,
+      normalInterval: normalInterval,
     );
   }
 

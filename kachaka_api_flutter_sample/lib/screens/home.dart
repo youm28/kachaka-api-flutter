@@ -17,8 +17,10 @@ class HomeScreen extends HookConsumerWidget {
     // PCサーバーから受信したロボットの状態を監視
     final robotStatus = ref.watch(robotStatusProvider);
     final queuedMessage = ref.watch(queuedMessageProvider);
-    // errorの場合もボタンを有効にするように修正
-    final isRobotBusy = robotStatus != 'idle' && robotStatus != 'error';
+    // movingの場合もボタンを有効にする（キューに追加できるように）
+    final isRobotBusy = robotStatus != 'idle' &&
+        robotStatus != 'error' &&
+        robotStatus != 'moving';
 
     // デバッグログ追加
     debugPrint('現在のロボットステータス: $robotStatus, ボタン無効: $isRobotBusy');
@@ -61,7 +63,7 @@ class HomeScreen extends HookConsumerWidget {
                 textAlign: TextAlign.center),
             const SizedBox(height: 24),
             // ロボットが待機中でない場合にメッセージを表示
-            if (isRobotBusy)
+            if (robotStatus == 'moving' || robotStatus == 'queued')
               Container(
                 height: 50, // メッセージエリアの高さを固定
                 alignment: Alignment.center,
@@ -75,6 +77,22 @@ class HomeScreen extends HookConsumerWidget {
                     style: TextStyle(
                         fontSize: 16,
                         color: Colors.orange.shade800,
+                        fontWeight: FontWeight.bold)),
+              )
+            else if (robotStatus == 'error')
+              Container(
+                height: 50, // メッセージエリアの高さを固定
+                alignment: Alignment.center,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(queuedMessage,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.red.shade800,
                         fontWeight: FontWeight.bold)),
               )
             else
