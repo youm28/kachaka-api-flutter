@@ -24,19 +24,26 @@ class RobotWidget extends HookConsumerWidget {
       return Container();
     }
 
-    /// calculate width and height pix on this screen
-    /// from mapLayout and actualSize of Kachaka.
-    final width =
-        robotDepth / (mapInfo.width * mapInfo.resolution) * layoutInfo.mapWidth;
-    final height = robotWidth /
-        (mapInfo.height * mapInfo.resolution) *
-        layoutInfo.mapHeight;
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // ★ START: ここの計算ロジックを修正                   ★
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // 画面に表示される際のロボットアイコンの幅と高さを計算
+    // 元のサイズに0.8を掛けて全体的に小さくする
+    final width = (robotDepth / (mapInfo.width * mapInfo.resolution)) *
+        layoutInfo.mapWidth *
+        0.8;
+    final height = (robotWidth / (mapInfo.height * mapInfo.resolution)) *
+        layoutInfo.mapHeight *
+        0.8;
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    // ★ END: ここの計算ロジックを修正                     ★
+    // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 
     final loc = MapHelper.pinWidgetToMapLocation(
       mapInfo: mapInfo,
       pose: robotPose,
       pinCenterFromBottom: height / 2.0,
-      pinCenterFormLeft: 0,
+      pinCenterFormLeft: width / 2.0,
       layoutInfo: layoutInfo,
     );
 
@@ -45,20 +52,14 @@ class RobotWidget extends HookConsumerWidget {
       bottom: loc[1],
       child: IgnorePointer(
         ignoring: true,
-        // 回転するのでその分だけ少し広めにwidgetを確保する
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Transform.rotate(
-              angle: -robotPose.theta,
-              child: Image.asset(
-                "assets/icons/kachaka.png",
-                width: width,
-                height: height,
-                fit: BoxFit.fill,
-              ),
-            ),
-          ],
+        child: Transform.rotate(
+          angle: -robotPose.theta,
+          child: Image.asset(
+            "assets/icons/kachaka.png",
+            width: width,
+            height: height,
+            fit: BoxFit.fill,
+          ),
         ),
       ),
     );
