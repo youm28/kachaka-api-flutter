@@ -120,19 +120,21 @@ class ServerCommunicationService {
     debugPrint('PCサーバーへ計画の同意を送信しました。');
   }
 
-  void sendInterestSelection(Location location, Pose robotPose) {
+  void sendInterestSelection(List<Location> locations, Pose robotPose) {
     if (_channel == null || _channel!.closeCode != null) return;
     final command = {
       "action": "SELECT_INTEREST",
-      "location": {
-        "id": location.id,
-        "name": location.name,
-        "pose": {
-          "x": location.pose.x,
-          "y": location.pose.y,
-          "theta": location.pose.theta
-        }
-      },
+      "locations": locations
+          .map((loc) => {
+                "id": loc.id,
+                "name": loc.name,
+                "pose": {
+                  "x": loc.pose.x,
+                  "y": loc.pose.y,
+                  "theta": loc.pose.theta
+                }
+              })
+          .toList(),
       "robot_pose": {
         "x": robotPose.x,
         "y": robotPose.y,
@@ -140,7 +142,8 @@ class ServerCommunicationService {
       }
     };
     _channel!.sink.add(jsonEncode(command));
-    debugPrint('PCサーバーへ興味のある場所を送信しました: ${location.name}');
+    debugPrint(
+        'PCサーバーへ興味のある場所を送信しました: ${locations.map((l) => l.name).join(", ")}');
   }
 
   // 全ての目的地情報をサーバーに送信

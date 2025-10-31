@@ -75,33 +75,29 @@ async def process_user_selections():
 
     print("✅ [Decision] Two selections received. Creating route plan.")
     
-    # 両ユーザーが選択した目的地を取得
-    selected_locations = {
-        user_selections["user_1"]["location"]["name"],
-        user_selections["user_2"]["location"]["name"]
-    }
-    
-    print(f"📍 [Selection] Selected locations: {selected_locations}")
-    
-    # 選択された目的地の情報をall_locations_mapに保存
+    # 両ユーザーが選択した全ての目的地を取得（合計最大4つ）
+    all_selected_locations = set()
     for user_id in ["user_1", "user_2"]:
-        loc_data = user_selections[user_id]["location"]
-        all_locations_map[loc_data["name"]] = loc_data
-        print(f"  - {user_id}: {loc_data['name']}")
+        locations_list = user_selections[user_id]["locations"]
+        for loc_data in locations_list:
+            all_selected_locations.add(loc_data["name"])
+            all_locations_map[loc_data["name"]] = loc_data
+            print(f"  - {user_id}: {loc_data['name']}")
+    
+    print(f"📍 [Selection] All selected locations: {all_selected_locations}")
     
     # 固定ルート順に従って、全目的地のリストを作成
     route_with_duration = []
     for location_name in FIXED_ROUTE_ORDER:
-        # location_dataを取得
         location_data = all_locations_map.get(location_name)
         
         if location_data:
-            # この目的地が選択されているかチェック
-            if location_name in selected_locations:
-                duration = 10  # ★ 選ばれた場所は10秒滞在
+            # 誰か1人でも選んだ場所は10秒滞在
+            if location_name in all_selected_locations:
+                duration = 10
                 print(f"  ✓ {location_name}: 10秒滞在 (選択済み)")
             else:
-                duration = 0   # ★ 選ばれなかった場所は0秒(即座に次へ)
+                duration = 0
                 print(f"  ○ {location_name}: 通過のみ")
             
             route_with_duration.append({
@@ -123,7 +119,6 @@ async def process_user_selections():
     print(f"📢 [Route] Starting route: {route_description}")
     print(f"📢 [Route] Total stops: {len(proposed_route)}")
     
-    # ★ 確認を省略して即座に移動開始
     await send_status_to_all_clients({
         "type": "STARTING_MOVE",
         "message": f"巡回を開始します"
@@ -348,14 +343,15 @@ async def websocket_kachaka_endpoint(websocket: WebSocket):
             if action == "SELECT_INTEREST":
                 if user_id in ["user_1", "user_2"]:
                     user_selections[user_id] = {
-                        "location": data.get("location"),
+                        "locations": data.get("locations", []),
                         "robot_pose": data.get("robot_pose")
                     }
-                    print(f"📝 [Selection] Saved for {user_id}: {data['location']['name']}")
+                    location_names = [loc["name"] for loc in data.get("locations", [])]
+                    print(f"📝 [Selection] Saved for {user_id}: {', '.join(location_names)}")
                     
                     # 選択された目的地をall_locations_mapに追加
-                    loc_data = data.get("location")
-                    all_locations_map[loc_data["name"]] = loc_data
+                    for loc_data in data.get("locations", []):
+                        all_locations_map[loc_data["name"]] = loc_data
                     
                     if len(user_selections) == 2:
                         await process_user_selections()

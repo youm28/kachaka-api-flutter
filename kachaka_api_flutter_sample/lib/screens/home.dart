@@ -31,11 +31,14 @@ class HomeScreen extends HookConsumerWidget {
         ref.watch(robotStoreProvider.select((value) => value.pose));
     final mapTransformState = useState(MapTransformState.init());
 
+    // ★ 選択された目的地を管理
+    final selectedLocations = useState<Set<String>>({});
+
     // 目的地リストをサーバーに送信 (充電ドックを除外)
     final availableLocations = locations
         .where((l) =>
             l.type != LocationType.LOCATION_TYPE_SHELF_HOME &&
-            !l.name.contains("充電")) // ★ 充電ドックを除外
+            !l.name.contains("充電"))
         .toList();
 
     useEffect(() {
@@ -49,11 +52,34 @@ class HomeScreen extends HookConsumerWidget {
       return null;
     }, [availableLocations.length]);
 
-    void sendInterest(Location targetLocation) {
+    void toggleLocationSelection(Location location) {
       // ★ ロボットが動作中の場合は選択を受け付けない
       if (isRobotBusy) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("ロボットが動作中です。完了までお待ちください。")));
+        return;
+      }
+
+      final newSelection = Set<String>.from(selectedLocations.value);
+      if (newSelection.contains(location.name)) {
+        // すでに選択されている場合は解除
+        newSelection.remove(location.name);
+      } else {
+        // 新しく選択
+        if (newSelection.length >= 2) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text("最大2つまで選択できます")));
+          return;
+        }
+        newSelection.add(location.name);
+      }
+      selectedLocations.value = newSelection;
+    }
+
+    void submitSelection() {
+      if (selectedLocations.value.length != 2) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("2つの場所を選択してください")));
         return;
       }
 
@@ -62,62 +88,89 @@ class HomeScreen extends HookConsumerWidget {
             .showSnackBar(const SnackBar(content: Text("ロボットの現在位置が不明です。")));
         return;
       }
+
+      final selected = availableLocations
+          .where((l) => selectedLocations.value.contains(l.name))
+          .toList();
+
       ref
           .read(serverCommunicationServiceProvider)
-          .sendInterestSelection(targetLocation, robotPose);
+          .sendInterestSelection(selected, robotPose);
+
+      selectedLocations.value = {};
     }
 
-    // ★ 同意ボタンを作成するウィジェット
-    Widget buildConfirmationButtons() {
-      final confirmationOptions = ['はい。', 'もちろん。', '賛成です。', 'その計画で行きましょう。'];
-      final serverCommService = ref.read(serverCommunicationServiceProvider);
-      return ListView.separated(
-        itemCount: confirmationOptions.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          return ElevatedButton(
-            onPressed: () => serverCommService.sendPlanConfirmation(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green.shade600,
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Text(confirmationOptions[index],
-                style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-          );
-        },
-      );
-    }
-
-    // ★ 7つの目的地ボタンを表示
+    // ★ 目的地ボタンを表示
     Widget buildInterestButtons() {
-      return ListView.separated(
-        itemCount: availableLocations.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          final location = availableLocations[index];
-          return ElevatedButton(
-            onPressed: isRobotBusy || showConfirmationButtons
-                ? null
-                : () => sendInterest(location),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple.shade600,
-              disabledBackgroundColor: Colors.grey.shade400,
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+      return Column(
+        children: [
+          Expanded(
+            child: ListView.separated(
+              itemCount: availableLocations.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final location = availableLocations[index];
+                final isSelected =
+                    selectedLocations.value.contains(location.name);
+
+                return ElevatedButton(
+                  onPressed: isRobotBusy || showConfirmationButtons
+                      ? null
+                      : () => toggleLocationSelection(location),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isSelected
+                        ? Colors.green.shade600
+                        : Colors.purple.shade600,
+                    disabledBackgroundColor: Colors.grey.shade400,
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (isSelected)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 8.0),
+                          child: Icon(Icons.check_circle, color: Colors.white),
+                        ),
+                      Text(location.name,
+                          style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white)),
+                    ],
+                  ),
+                );
+              },
             ),
-            child: Text(location.name,
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: (isRobotBusy ||
+                      showConfirmationButtons ||
+                      selectedLocations.value.length != 2)
+                  ? null
+                  : submitSelection,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade700,
+                disabledBackgroundColor: Colors.grey.shade400,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: Text(
+                '決定 (${selectedLocations.value.length}/2)',
                 style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-          );
-        },
+                    color: Colors.white),
+              ),
+            ),
+          ),
+        ],
       );
     }
 
@@ -135,14 +188,14 @@ class HomeScreen extends HookConsumerWidget {
               decoration: BoxDecoration(
                 color: showConfirmationButtons
                     ? Colors.green.shade50
-                    : (isRobotBusy // ★ robotStatus == 'moving' から isRobotBusy に変更
+                    : (isRobotBusy
                         ? Colors.orange.shade100
                         : Colors.blue.shade50),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                     color: showConfirmationButtons
                         ? Colors.green.shade300
-                        : (isRobotBusy // ★ robotStatus == 'moving' から isRobotBusy に変更
+                        : (isRobotBusy
                             ? Colors.orange.shade300
                             : Colors.blue.shade200),
                     width: 2),
@@ -155,23 +208,21 @@ class HomeScreen extends HookConsumerWidget {
                     fontSize: 16,
                     color: showConfirmationButtons
                         ? Colors.green.shade900
-                        : (isRobotBusy // ★ robotStatus == 'moving' から isRobotBusy に変更
+                        : (isRobotBusy
                             ? Colors.orange.shade900
                             : Colors.blue.shade900),
                     fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(height: 24),
-            Text(
-              showConfirmationButtons ? "以下の計画に同意しますか?" : "どこに興味がありますか?",
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            const Text(
+              "興味のある場所を2つ選んでください",
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               textAlign: TextAlign.left,
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: showConfirmationButtons
-                  ? buildConfirmationButtons()
-                  : buildInterestButtons(),
+              child: buildInterestButtons(),
             ),
           ],
         ),
@@ -199,11 +250,11 @@ class HomeScreen extends HookConsumerWidget {
                             .where((l) =>
                                 l.type !=
                                     LocationType.LOCATION_TYPE_SHELF_HOME &&
-                                !l.name.contains("充電")) // ★ 地図上のピンからも充電ドックを除外
+                                !l.name.contains("充電"))
                             .map((e) => _locationPin(e, () {
                                   if (!isRobotBusy &&
                                       !showConfirmationButtons) {
-                                    sendInterest(e);
+                                    toggleLocationSelection(e);
                                   }
                                 })),
                       ],
