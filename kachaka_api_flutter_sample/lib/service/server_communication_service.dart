@@ -42,9 +42,7 @@ class ServerCommunicationService {
 
           // ★ 新しいメッセージタイプを処理
           case 'PROPOSE_PLAN':
-            _ref.read(cooperationMessageProvider.notifier).state =
-                data['message'];
-            _ref.read(showConfirmationButtonsProvider.notifier).state = true;
+            // ★ この処理を削除 (確認ステップをスキップ)
             break;
           case 'STARTING_MOVE':
             _ref.read(cooperationMessageProvider.notifier).state =
@@ -63,7 +61,7 @@ class ServerCommunicationService {
             if (status == 'idle' || status == 'error') {
               _ref.read(showConfirmationButtonsProvider.notifier).state = false;
               _ref.read(cooperationMessageProvider.notifier).state =
-                  'どこに行きますか？';
+                  'あなたの興味のある場所はどこですか？';
             } else if (status == 'moving') {
               _ref.read(cooperationMessageProvider.notifier).state =
                   "'${data['destination']}'へ移動中です...";
@@ -114,12 +112,58 @@ class ServerCommunicationService {
     debugPrint('PCサーバーへ目的地リクエストを送信しました: ${location.name}');
   }
 
-  // ★ 同意を送信する新しいメソッド
+  // ★ この関数は使わなくなったが、互換性のため残しておく
   void sendPlanConfirmation() {
     if (_channel == null || _channel!.closeCode != null) return;
     final command = {"action": "CONFIRM_PLAN"};
     _channel!.sink.add(jsonEncode(command));
     debugPrint('PCサーバーへ計画の同意を送信しました。');
+  }
+
+  void sendInterestSelection(Location location, Pose robotPose) {
+    if (_channel == null || _channel!.closeCode != null) return;
+    final command = {
+      "action": "SELECT_INTEREST",
+      "location": {
+        "id": location.id,
+        "name": location.name,
+        "pose": {
+          "x": location.pose.x,
+          "y": location.pose.y,
+          "theta": location.pose.theta
+        }
+      },
+      "robot_pose": {
+        "x": robotPose.x,
+        "y": robotPose.y,
+        "theta": robotPose.theta
+      }
+    };
+    _channel!.sink.add(jsonEncode(command));
+    debugPrint('PCサーバーへ興味のある場所を送信しました: ${location.name}');
+  }
+
+  // 全ての目的地情報をサーバーに送信
+  void sendAllLocations(List<Location> locations) {
+    if (_channel == null || _channel!.closeCode != null) return;
+    final locationsData = locations
+        .map((loc) => {
+              "id": loc.id,
+              "name": loc.name,
+              "pose": {
+                "x": loc.pose.x,
+                "y": loc.pose.y,
+                "theta": loc.pose.theta
+              }
+            })
+        .toList();
+
+    final command = {
+      "action": "SEND_ALL_LOCATIONS",
+      "locations": locationsData
+    };
+    _channel!.sink.add(jsonEncode(command));
+    debugPrint('PCサーバーへ全目的地情報を送信しました: ${locations.length}件');
   }
 
   void disconnect() {

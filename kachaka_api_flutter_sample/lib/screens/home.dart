@@ -19,7 +19,9 @@ class HomeScreen extends HookConsumerWidget {
     final robotStatus = ref.watch(robotStatusProvider);
     final cooperationMessage = ref.watch(cooperationMessageProvider);
     final showConfirmationButtons = ref.watch(showConfirmationButtonsProvider);
-    final isRobotBusy = robotStatus == 'moving';
+
+    // ★ ロボットが移動中、または滞在中の場合は選択を受け付けない
+    final isRobotBusy = robotStatus == 'moving' || robotStatus == 'waiting';
 
     final locations = ref
         .watch(locationStoreProvider.select((value) => value.locations ?? []));
@@ -29,7 +31,32 @@ class HomeScreen extends HookConsumerWidget {
         ref.watch(robotStoreProvider.select((value) => value.pose));
     final mapTransformState = useState(MapTransformState.init());
 
-    void sendRequest(Location targetLocation) {
+    // 目的地リストをサーバーに送信 (充電ドックを除外)
+    final availableLocations = locations
+        .where((l) =>
+            l.type != LocationType.LOCATION_TYPE_SHELF_HOME &&
+            !l.name.contains("充電")) // ★ 充電ドックを除外
+        .toList();
+
+    useEffect(() {
+      if (availableLocations.isNotEmpty) {
+        Future.delayed(const Duration(seconds: 1), () {
+          ref
+              .read(serverCommunicationServiceProvider)
+              .sendAllLocations(availableLocations);
+        });
+      }
+      return null;
+    }, [availableLocations.length]);
+
+    void sendInterest(Location targetLocation) {
+      // ★ ロボットが動作中の場合は選択を受け付けない
+      if (isRobotBusy) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("ロボットが動作中です。完了までお待ちください。")));
+        return;
+      }
+
       if (robotPose == null) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text("ロボットの現在位置が不明です。")));
@@ -37,12 +64,8 @@ class HomeScreen extends HookConsumerWidget {
       }
       ref
           .read(serverCommunicationServiceProvider)
-          .sendDestinationRequest(targetLocation, robotPose);
+          .sendInterestSelection(targetLocation, robotPose);
     }
-
-    final availableLocations = locations
-        .where((l) => l.type != LocationType.LOCATION_TYPE_SHELF_HOME)
-        .toList();
 
     // ★ 同意ボタンを作成するウィジェット
     Widget buildConfirmationButtons() {
@@ -70,8 +93,8 @@ class HomeScreen extends HookConsumerWidget {
       );
     }
 
-    // ★ 目的地ボタンを作成するウィジェット
-    Widget buildDestinationButtons() {
+    // ★ 7つの目的地ボタンを表示
+    Widget buildInterestButtons() {
       return ListView.separated(
         itemCount: availableLocations.length,
         separatorBuilder: (context, index) => const SizedBox(height: 12),
@@ -80,9 +103,9 @@ class HomeScreen extends HookConsumerWidget {
           return ElevatedButton(
             onPressed: isRobotBusy || showConfirmationButtons
                 ? null
-                : () => sendRequest(location),
+                : () => sendInterest(location),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade600,
+              backgroundColor: Colors.purple.shade600,
               disabledBackgroundColor: Colors.grey.shade400,
               padding: const EdgeInsets.symmetric(vertical: 20),
               shape: RoundedRectangleBorder(
@@ -112,14 +135,14 @@ class HomeScreen extends HookConsumerWidget {
               decoration: BoxDecoration(
                 color: showConfirmationButtons
                     ? Colors.green.shade50
-                    : (robotStatus == 'moving'
+                    : (isRobotBusy // ★ robotStatus == 'moving' から isRobotBusy に変更
                         ? Colors.orange.shade100
                         : Colors.blue.shade50),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                     color: showConfirmationButtons
                         ? Colors.green.shade300
-                        : (robotStatus == 'moving'
+                        : (isRobotBusy // ★ robotStatus == 'moving' から isRobotBusy に変更
                             ? Colors.orange.shade300
                             : Colors.blue.shade200),
                     width: 2),
@@ -132,7 +155,7 @@ class HomeScreen extends HookConsumerWidget {
                     fontSize: 16,
                     color: showConfirmationButtons
                         ? Colors.green.shade900
-                        : (robotStatus == 'moving'
+                        : (isRobotBusy // ★ robotStatus == 'moving' から isRobotBusy に変更
                             ? Colors.orange.shade900
                             : Colors.blue.shade900),
                     fontWeight: FontWeight.bold),
@@ -140,7 +163,7 @@ class HomeScreen extends HookConsumerWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              showConfirmationButtons ? "以下の計画に同意しますか？" : "目的地",
+              showConfirmationButtons ? "以下の計画に同意しますか?" : "どこに興味がありますか?",
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               textAlign: TextAlign.left,
             ),
@@ -148,7 +171,7 @@ class HomeScreen extends HookConsumerWidget {
             Expanded(
               child: showConfirmationButtons
                   ? buildConfirmationButtons()
-                  : buildDestinationButtons(),
+                  : buildInterestButtons(),
             ),
           ],
         ),
@@ -174,11 +197,13 @@ class HomeScreen extends HookConsumerWidget {
                       pins: [
                         ...locations
                             .where((l) =>
-                                l.type != LocationType.LOCATION_TYPE_SHELF_HOME)
+                                l.type !=
+                                    LocationType.LOCATION_TYPE_SHELF_HOME &&
+                                !l.name.contains("充電")) // ★ 地図上のピンからも充電ドックを除外
                             .map((e) => _locationPin(e, () {
                                   if (!isRobotBusy &&
                                       !showConfirmationButtons) {
-                                    sendRequest(e);
+                                    sendInterest(e);
                                   }
                                 })),
                       ],
