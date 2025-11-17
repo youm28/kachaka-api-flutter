@@ -15,10 +15,10 @@ class HomeScreen extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 状態を監視
     final robotStatus = ref.watch(robotStatusProvider);
     final cooperationMessage = ref.watch(cooperationMessageProvider);
-    final showConfirmationButtons = ref.watch(showConfirmationButtonsProvider);
+    final uiMode = ref.watch(uiModeProvider);
+    final userId = ref.watch(userIdProvider);
     final isRobotBusy = robotStatus == 'moving';
 
     final locations = ref
@@ -40,45 +40,26 @@ class HomeScreen extends HookConsumerWidget {
           .sendDestinationRequest(targetLocation, robotPose);
     }
 
-    final availableLocations = locations
-        .where((l) => l.type != LocationType.LOCATION_TYPE_SHELF_HOME)
-        .toList();
+    // ★ 目的地1~5のみフィルタリング (user_1, user_2 共通)
+    final availableDestinations = locations.where((l) {
+      // 充電ドック、経由地点(a,b,c)、その他(d,e)を除外
+      final restrictedNames = ['充電ドック', 'a', 'b', 'c', 'd', 'e'];
+      return !restrictedNames.contains(l.name) &&
+          l.type != LocationType.LOCATION_TYPE_SHELF_HOME;
+    }).toList();
 
-    // ★ 同意ボタンを作成するウィジェット
-    Widget buildConfirmationButtons() {
-      final confirmationOptions = ['はい。', 'もちろん。', '賛成です。', 'その計画で行きましょう。'];
-      final serverCommService = ref.read(serverCommunicationServiceProvider);
-      return ListView.separated(
-        itemCount: confirmationOptions.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          return ElevatedButton(
-            onPressed: () => serverCommService.sendPlanConfirmation(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green.shade600,
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Text(confirmationOptions[index],
-                style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-          );
-        },
-      );
-    }
+    // ★ 地図上のピン表示用: 両ユーザーとも1~5のみ表示
+    final visibleLocations = availableDestinations;
 
-    // ★ 目的地ボタンを作成するウィジェット
+    // ★ 目的地ボタンを作成するウィジェット (user_1用)
     Widget buildDestinationButtons() {
       return ListView.separated(
-        itemCount: availableLocations.length,
+        itemCount: availableDestinations.length,
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
-          final location = availableLocations[index];
+          final location = availableDestinations[index];
           return ElevatedButton(
-            onPressed: isRobotBusy || showConfirmationButtons
+            onPressed: isRobotBusy || uiMode == 'waiting'
                 ? null
                 : () => sendRequest(location),
             style: ElevatedButton.styleFrom(
@@ -89,6 +70,41 @@ class HomeScreen extends HookConsumerWidget {
                   borderRadius: BorderRadius.circular(12)),
             ),
             child: Text(location.name,
+                style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white)),
+          );
+        },
+      );
+    }
+
+    // ★ 経路選択ボタンを作成
+    Widget buildRouteButtons() {
+      final routes = [
+        {'label': '上ルート', 'value': 'upper'},
+        {'label': '中ルート', 'value': 'middle'},
+        {'label': '下ルート', 'value': 'lower'},
+      ];
+      final serverCommService = ref.read(serverCommunicationServiceProvider);
+
+      return ListView.separated(
+        itemCount: routes.length,
+        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final route = routes[index];
+          return ElevatedButton(
+            onPressed: isRobotBusy || uiMode == 'waiting'
+                ? null
+                : () => serverCommService.sendRouteSelection(route['value']!),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple.shade600,
+              disabledBackgroundColor: Colors.grey.shade400,
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text(route['label']!,
                 style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -110,15 +126,15 @@ class HomeScreen extends HookConsumerWidget {
               height: 80,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: showConfirmationButtons
-                    ? Colors.green.shade50
+                color: uiMode == 'route'
+                    ? Colors.purple.shade50
                     : (robotStatus == 'moving'
                         ? Colors.orange.shade100
                         : Colors.blue.shade50),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                    color: showConfirmationButtons
-                        ? Colors.green.shade300
+                    color: uiMode == 'route'
+                        ? Colors.purple.shade300
                         : (robotStatus == 'moving'
                             ? Colors.orange.shade300
                             : Colors.blue.shade200),
@@ -130,8 +146,8 @@ class HomeScreen extends HookConsumerWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                     fontSize: 16,
-                    color: showConfirmationButtons
-                        ? Colors.green.shade900
+                    color: uiMode == 'route'
+                        ? Colors.purple.shade900
                         : (robotStatus == 'moving'
                             ? Colors.orange.shade900
                             : Colors.blue.shade900),
@@ -140,14 +156,14 @@ class HomeScreen extends HookConsumerWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              showConfirmationButtons ? "以下の計画に同意しますか？" : "目的地",
+              uiMode == 'route' ? "経路を選択" : "目的地",
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
               textAlign: TextAlign.left,
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: showConfirmationButtons
-                  ? buildConfirmationButtons()
+              child: uiMode == 'route'
+                  ? buildRouteButtons()
                   : buildDestinationButtons(),
             ),
           ],
@@ -172,15 +188,15 @@ class HomeScreen extends HookConsumerWidget {
                     child: MapWidget(
                       mapInfo: mapInfo,
                       pins: [
-                        ...locations
-                            .where((l) =>
-                                l.type != LocationType.LOCATION_TYPE_SHELF_HOME)
-                            .map((e) => _locationPin(e, () {
-                                  if (!isRobotBusy &&
-                                      !showConfirmationButtons) {
-                                    sendRequest(e);
-                                  }
-                                })),
+                        // ★ 両ユーザーとも1~5のみ表示
+                        ...visibleLocations.map((e) => _locationPin(e, () {
+                              // user_1の時のみクリック可能
+                              if (!isRobotBusy &&
+                                  uiMode != 'waiting' &&
+                                  userId == 'user_1') {
+                                sendRequest(e);
+                              }
+                            })),
                       ],
                       mapTransformState: mapTransformState,
                     ),
@@ -193,7 +209,6 @@ class HomeScreen extends HookConsumerWidget {
   }
 
   PinModel _locationPin(Location location, Function() onTap) {
-    // (このメソッドに変更はありません)
     final pinLabel = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
