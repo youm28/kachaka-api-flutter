@@ -4,7 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kachaka_api/kachaka_api.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-const String _serverIp = "10.40.5.34";
+const String _serverIp = "10.40.42.16"; // PCサーバーのIPアドレス
 const int _serverPort = 8000;
 
 final userIdProvider = StateProvider<String?>((ref) => null);

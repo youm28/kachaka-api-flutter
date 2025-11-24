@@ -58,7 +58,7 @@ class MapWidget extends HookConsumerWidget {
         }, [mapLayout]);
 
         return RotatedBox(
-          quarterTurns: 3,
+          quarterTurns: 0, //回転角度
           child: InteractiveViewer(
             transformationController: transformationController,
             maxScale: double.infinity,
@@ -73,9 +73,7 @@ class MapWidget extends HookConsumerWidget {
             child: SizedBox(
               width: mapLayout.mapWidth,
               height: mapLayout.mapHeight,
-              // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-              // ★ START: ここのStack内の描画順を変更                ★
-              // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+              //  START: ここのStack内の描画順を変更
               child: Stack(
                 children: [
                   // 1番目: 地図画像 (一番下に描画)

@@ -81,10 +81,19 @@ class HomeScreen extends HookConsumerWidget {
 
     // ★ 経路選択ボタンを作成
     Widget buildRouteButtons() {
+      // routeの定義: ラベル、送信する値、ボタンの色
       final routes = [
-        {'label': '上ルート', 'value': 'upper'},
-        {'label': '中ルート', 'value': 'middle'},
-        {'label': '下ルート', 'value': 'lower'},
+        {'label': '左ルート', 'value': 'route_left', 'color': Colors.pink.shade400},
+        {
+          'label': '中央ルート',
+          'value': 'route_center',
+          'color': Colors.purple.shade500
+        },
+        {
+          'label': '右ルート',
+          'value': 'route_right',
+          'color': Colors.indigo.shade500
+        },
       ];
       final serverCommService = ref.read(serverCommunicationServiceProvider);
 
@@ -96,15 +105,17 @@ class HomeScreen extends HookConsumerWidget {
           return ElevatedButton(
             onPressed: isRobotBusy || uiMode == 'waiting'
                 ? null
-                : () => serverCommService.sendRouteSelection(route['value']!),
+                : () => serverCommService
+                    .sendRouteSelection(route['value'] as String),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple.shade600,
+              // 定義した色を使用
+              backgroundColor: route['color'] as Color,
               disabledBackgroundColor: Colors.grey.shade400,
               padding: const EdgeInsets.symmetric(vertical: 20),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
-            child: Text(route['label']!,
+            child: Text(route['label'] as String,
                 style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
