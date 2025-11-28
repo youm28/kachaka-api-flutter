@@ -30,8 +30,10 @@ class HomeScreen extends HookConsumerWidget {
     final mapTransformState = useState(MapTransformState.init());
 
     final currentLocation = ref.watch(currentLocationProvider);
-
     final isSystemReady = ref.watch(isSystemReadyProvider);
+
+    // ★★★ 追加: 現在の目的地選択権を持つユーザーID ★★★
+    final destinationSelector = ref.watch(destinationSelectorProvider);
 
     const allowedStartLocations = ['充電ドック', '1', '2', '3', '4', '5', '6'];
     final isAtValidStartLocation =
@@ -63,15 +65,14 @@ class HomeScreen extends HookConsumerWidget {
 
     final visibleLocations = availableDestinations;
 
-    // ★ 目的地ボタン (User 1用)
+    // ★ 目的地ボタン (選択権があるユーザー用)
     Widget buildDestinationButtons() {
-      // User 2 の場合は、状態に応じて表示を切り替える
-      if (userId == 'user_2') {
-        // ★★★ 修正: 移動中または待機中(waiting)なら、移動中のメッセージを表示 ★★★
+      // 自分が目的地選択権を持っていない場合
+      if (userId != destinationSelector) {
         if (isRobotBusy || uiMode == 'waiting') {
           return const Center(
             child: Text(
-              "選択された経路で\n向かいます",
+              "選択された目的地へ\n向かいます",
               textAlign: TextAlign.center,
               style: TextStyle(
                   fontSize: 20,
@@ -81,16 +82,16 @@ class HomeScreen extends HookConsumerWidget {
           );
         }
 
-        // それ以外は待機メッセージ
         return const Center(
           child: Text(
-            "User 1 が目的地を選択するのを\n待っています...",
+            "パートナーが目的地を選択するのを\n待っています...",
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 18, color: Colors.grey),
           ),
         );
       }
 
+      // 自分に選択権がある場合
       return ListView.separated(
         itemCount: availableDestinations.length,
         separatorBuilder: (context, index) => const SizedBox(height: 12),
@@ -121,7 +122,7 @@ class HomeScreen extends HookConsumerWidget {
       );
     }
 
-    // ★ 経路選択ボタン (User 2用)
+    // ★ 経路選択ボタン (選択権が *ない* ユーザー＝経路担当用)
     Widget buildRouteButtons() {
       final routes = [
         {'label': '左ルート', 'value': 'route_left', 'color': Colors.pink.shade400},
@@ -235,7 +236,9 @@ class HomeScreen extends HookConsumerWidget {
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: uiMode == 'route'
+              // uiMode == 'route' の時は、経路選択者が操作。
+              // 自分が目的地選択者でない(=経路選択者)なら、routeボタンを表示。
+              child: (uiMode == 'route' && userId != destinationSelector)
                   ? buildRouteButtons()
                   : buildDestinationButtons(),
             ),
@@ -262,9 +265,10 @@ class HomeScreen extends HookConsumerWidget {
                       mapInfo: mapInfo,
                       pins: [
                         ...visibleLocations.map((e) => _locationPin(e, () {
+                              // ピンタップも同様に制御
                               if (!isRobotBusy &&
                                   uiMode != 'waiting' &&
-                                  userId == 'user_1' &&
+                                  userId == destinationSelector && // 権利者のみタップ可
                                   isAtValidStartLocation &&
                                   isSystemReady) {
                                 sendRequest(e);
