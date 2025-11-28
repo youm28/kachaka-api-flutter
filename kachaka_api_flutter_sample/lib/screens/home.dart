@@ -40,15 +40,21 @@ class HomeScreen extends HookConsumerWidget {
           .sendDestinationRequest(targetLocation, robotPose);
     }
 
-    // ★ 目的地1~5のみフィルタリング (user_1, user_2 共通)
+    // ★ 目的地1~6のみフィルタリング
     final availableDestinations = locations.where((l) {
-      // 充電ドック、経由地点(a,b,c)、その他(d,e)を除外
       final restrictedNames = ['充電ドック', 'a', 'b', 'c', 'd', 'e'];
       return !restrictedNames.contains(l.name) &&
           l.type != LocationType.LOCATION_TYPE_SHELF_HOME;
     }).toList();
 
-    // ★ 地図上のピン表示用: 両ユーザーとも1~5のみ表示
+    // ★ 数字の昇順（1→6）にソート
+    availableDestinations.sort((a, b) {
+      final ai = int.tryParse(a.name) ?? 0;
+      final bi = int.tryParse(b.name) ?? 0;
+      return ai.compareTo(bi);
+    });
+
+    // ★ 地図上のピン表示用
     final visibleLocations = availableDestinations;
 
     // ★ 目的地ボタンを作成するウィジェット (user_1用)
