@@ -8,7 +8,7 @@
           "flutterMode": "debug",
           "args": [
             // カチャカのIPアドレスを設定
-              "--dart-define=IP_ADDRESS=10.40.42.15"
+              "--dart-define=IP_ADDRESS=10.40.5.108"
           ]
       }
   ]

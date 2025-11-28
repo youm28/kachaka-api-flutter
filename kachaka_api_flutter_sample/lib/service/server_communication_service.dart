@@ -4,7 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kachaka_api/kachaka_api.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-const String _serverIp = "10.40.42.16"; // PCサーバーのIPアドレス
+const String _serverIp = "10.40.5.34"; // PCサーバーのIPアドレス
 const int _serverPort = 8000;
 
 final userIdProvider = StateProvider<String?>((ref) => null);
@@ -12,7 +12,9 @@ final cooperationMessageProvider =
     StateProvider<String>((ref) => 'サーバーに接続中...');
 final robotStatusProvider = StateProvider<String>((ref) => 'idle');
 
-// ★ UIモードを管理 ("destination" or "route")
+// 現在地を管理するProvider
+final currentLocationProvider = StateProvider<String>((ref) => '充電ドック');
+
 final uiModeProvider = StateProvider<String>((ref) => 'destination');
 
 final serverCommunicationServiceProvider =
@@ -41,7 +43,12 @@ class ServerCommunicationService {
             _ref.read(cooperationMessageProvider.notifier).state =
                 data['message'] ?? 'どこに行きますか？';
 
-            // ★ user_2の場合は経路選択モードに
+            // ★ 接続時に現在地を更新
+            if (data['current_location'] != null) {
+              _ref.read(currentLocationProvider.notifier).state =
+                  data['current_location'];
+            }
+
             if (data['user_id'] == 'user_2') {
               _ref.read(uiModeProvider.notifier).state = 'route';
             }
@@ -50,7 +57,6 @@ class ServerCommunicationService {
           case 'WAITING_FOR_ROUTE':
             _ref.read(cooperationMessageProvider.notifier).state =
                 data['message'];
-            // ★ user_2のみ経路選択モードに切り替え
             if (userId == 'user_2') {
               _ref.read(uiModeProvider.notifier).state = 'route';
             }
@@ -65,8 +71,14 @@ class ServerCommunicationService {
           case 'kachaka_status':
             final status = data['status'] as String?;
             _ref.read(robotStatusProvider.notifier).state = status ?? 'idle';
+
+            // ★ ステータス通知に含まれる現在地情報を反映
+            if (data['current_location'] != null) {
+              _ref.read(currentLocationProvider.notifier).state =
+                  data['current_location'];
+            }
+
             if (status == 'idle' || status == 'error') {
-              // ★ 完了後、user_1は目的地選択、user_2は経路選択に戻る
               _ref.read(uiModeProvider.notifier).state =
                   userId == 'user_1' ? 'destination' : 'route';
               _ref.read(cooperationMessageProvider.notifier).state =
@@ -119,13 +131,9 @@ class ServerCommunicationService {
     debugPrint('PCサーバーへ目的地リクエストを送信しました: ${location.name}');
   }
 
-  // ★ 経路選択を送信する新しいメソッド
   void sendRouteSelection(String route) {
     if (_channel == null || _channel!.closeCode != null) return;
-    final command = {
-      "action": "SELECT_ROUTE",
-      "route": route // "upper", "middle", "lower"
-    };
+    final command = {"action": "SELECT_ROUTE", "route": route};
     _channel!.sink.add(jsonEncode(command));
     debugPrint('PCサーバーへ経路選択を送信しました: $route');
   }

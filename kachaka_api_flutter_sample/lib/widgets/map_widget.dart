@@ -58,7 +58,7 @@ class MapWidget extends HookConsumerWidget {
         }, [mapLayout]);
 
         return RotatedBox(
-          quarterTurns: 0, //回転角度
+          quarterTurns: 3, //回転角度
           child: InteractiveViewer(
             transformationController: transformationController,
             maxScale: double.infinity,
