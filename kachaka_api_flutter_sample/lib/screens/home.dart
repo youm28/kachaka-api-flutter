@@ -31,13 +31,43 @@ class HomeScreen extends HookConsumerWidget {
 
     final currentLocation = ref.watch(currentLocationProvider);
     final isSystemReady = ref.watch(isSystemReadyProvider);
-
-    // ★★★ 追加: 現在の目的地選択権を持つユーザーID ★★★
     final destinationSelector = ref.watch(destinationSelectorProvider);
+
+    // ★★★ 追加: ルートプレビュー用のデータ ★★★
+    final routeOptions = ref.watch(routeOptionsProvider);
+    final targetDestination = ref.watch(targetDestinationProvider);
+    final selectedPreviewRoute = useState<String?>(null); // 現在プレビュー中のルート
 
     const allowedStartLocations = ['充電ドック', '1', '2', '3', '4', '5', '6'];
     final isAtValidStartLocation =
         allowedStartLocations.contains(currentLocation);
+
+    // ★★★ 追加: プレビューパスの生成 ★★★
+    List<Pose>? previewPath;
+    if (selectedPreviewRoute.value != null && robotPose != null) {
+      final path = [robotPose]; // 1. スタート地点 (ロボット)
+
+      // 2. 経由地
+      final waypointsNames =
+          routeOptions[selectedPreviewRoute.value] as List<dynamic>? ?? [];
+      for (var name in waypointsNames) {
+        final loc = locations.firstWhere((l) => l.name == name,
+            orElse: () => Location());
+        if (loc.name.isNotEmpty) {
+          path.add(loc.pose);
+        }
+      }
+
+      // 3. 最終目的地
+      if (targetDestination != null) {
+        final destLoc = locations.firstWhere((l) => l.name == targetDestination,
+            orElse: () => Location());
+        if (destLoc.name.isNotEmpty) {
+          path.add(destLoc.pose);
+        }
+      }
+      previewPath = path;
+    }
 
     void sendRequest(Location targetLocation) {
       if (robotPose == null) {
@@ -65,9 +95,8 @@ class HomeScreen extends HookConsumerWidget {
 
     final visibleLocations = availableDestinations;
 
-    // ★ 目的地ボタン (選択権があるユーザー用)
+    // ★ 目的地ボタン
     Widget buildDestinationButtons() {
-      // 自分が目的地選択権を持っていない場合
       if (userId != destinationSelector) {
         if (isRobotBusy || uiMode == 'waiting') {
           return const Center(
@@ -81,7 +110,6 @@ class HomeScreen extends HookConsumerWidget {
             ),
           );
         }
-
         return const Center(
           child: Text(
             "パートナーが目的地を選択するのを\n待っています...",
@@ -91,13 +119,11 @@ class HomeScreen extends HookConsumerWidget {
         );
       }
 
-      // 自分に選択権がある場合
       return ListView.separated(
         itemCount: availableDestinations.length,
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final location = availableDestinations[index];
-
           final bool canPress = !isRobotBusy &&
               uiMode != 'waiting' &&
               isAtValidStartLocation &&
@@ -122,7 +148,7 @@ class HomeScreen extends HookConsumerWidget {
       );
     }
 
-    // ★ 経路選択ボタン (選択権が *ない* ユーザー＝経路担当用)
+    // ★ 経路選択ボタン (プレビュー機能付き)
     Widget buildRouteButtons() {
       final routes = [
         {'label': '左ルート', 'value': 'route_left', 'color': Colors.pink.shade400},
@@ -139,36 +165,82 @@ class HomeScreen extends HookConsumerWidget {
       ];
       final serverCommService = ref.read(serverCommunicationServiceProvider);
 
-      return ListView.separated(
-        itemCount: routes.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          final route = routes[index];
+      return Column(
+        children: [
+          Expanded(
+            child: ListView.separated(
+              itemCount: routes.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final route = routes[index];
+                final value = route['value'] as String;
+                final isSelected = selectedPreviewRoute.value == value;
 
-          final bool canPress = !isRobotBusy &&
-              uiMode != 'waiting' &&
-              isAtValidStartLocation &&
-              isSystemReady;
+                final bool canPress = !isRobotBusy &&
+                    uiMode != 'waiting' &&
+                    isAtValidStartLocation &&
+                    isSystemReady;
 
-          return ElevatedButton(
-            onPressed: canPress
-                ? () => serverCommService
-                    .sendRouteSelection(route['value'] as String)
-                : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: route['color'] as Color,
-              disabledBackgroundColor: Colors.grey.shade400,
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                return ElevatedButton(
+                  onPressed: canPress
+                      ? () {
+                          // ★ タップしたらプレビュー状態にする (送信はしない)
+                          selectedPreviewRoute.value = value;
+                        }
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: route['color'] as Color,
+                    // 選択中は枠線で強調
+                    side: isSelected
+                        ? const BorderSide(color: Colors.white, width: 4)
+                        : null,
+                    disabledBackgroundColor: Colors.grey.shade400,
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (isSelected)
+                        const Icon(Icons.check, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Text(route['label'] as String,
+                          style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white)),
+                    ],
+                  ),
+                );
+              },
             ),
-            child: Text(route['label'] as String,
-                style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white)),
-          );
-        },
+          ),
+          // ★★★ 決定ボタン (プレビュー選択時のみ表示) ★★★
+          if (selectedPreviewRoute.value != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: ElevatedButton(
+                onPressed: () {
+                  // ここで送信
+                  serverCommService
+                      .sendRouteSelection(selectedPreviewRoute.value!);
+                  selectedPreviewRoute.value = null; // リセット
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  minimumSize: const Size(double.infinity, 60),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text("この経路で決定",
+                    style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
+              ),
+            ),
+        ],
       );
     }
 
@@ -236,8 +308,6 @@ class HomeScreen extends HookConsumerWidget {
             ),
             const SizedBox(height: 16),
             Expanded(
-              // uiMode == 'route' の時は、経路選択者が操作。
-              // 自分が目的地選択者でない(=経路選択者)なら、routeボタンを表示。
               child: (uiMode == 'route' && userId != destinationSelector)
                   ? buildRouteButtons()
                   : buildDestinationButtons(),
@@ -265,10 +335,9 @@ class HomeScreen extends HookConsumerWidget {
                       mapInfo: mapInfo,
                       pins: [
                         ...visibleLocations.map((e) => _locationPin(e, () {
-                              // ピンタップも同様に制御
                               if (!isRobotBusy &&
                                   uiMode != 'waiting' &&
-                                  userId == destinationSelector && // 権利者のみタップ可
+                                  userId == destinationSelector &&
                                   isAtValidStartLocation &&
                                   isSystemReady) {
                                 sendRequest(e);
@@ -276,6 +345,7 @@ class HomeScreen extends HookConsumerWidget {
                             })),
                       ],
                       mapTransformState: mapTransformState,
+                      previewPath: previewPath, // ★ MapWidgetにプレビューパスを渡す
                     ),
                   ),
           ),

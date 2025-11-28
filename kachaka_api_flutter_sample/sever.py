@@ -32,7 +32,7 @@ current_moving_location = None
 # 現在の目的地選択権を持つユーザーID (初期値: user_1)
 current_destination_selector = "user_1" 
 
-# 経路定義 (省略なし)
+# 経路定義
 ROUTE_PATTERNS = {
     ("充電ドック", "1"): {"route_left": ["a"], "route_center": ["b"], "route_right": ["e", "c", "d"]},
     ("充電ドック", "2"): {"route_left": ["a", "d"], "route_center": ["b", "d"], "route_right": ["e", "c"]},
@@ -62,7 +62,7 @@ ROUTE_PATTERNS = {
     ("4", "6"): {"route_left": ["a"], "route_center": ["b"], "route_right": ["c", "e"]},
     ("5", "1"): {"route_left": ["a"], "route_center": ["b"], "route_right": ["e", "c", "d"]},
     ("5", "2"): {"route_left": ["a", "d"], "route_center": ["b", "d"], "route_right": ["e", "c"]},
-    ("5", "3"): {"route_left": ["a", "d", "c"], "route_center": ["c"], "route_right": ["e"]},
+    ("5", "3"): {"route_left": ["a", "d"], "route_center": ["c"], "route_right": ["e"]},
     ("5", "4"): {"route_left": ["a", "d"], "route_center": ["b"], "route_right": ["e", "c"]},
     ("5", "6"): {"route_left": ["a"], "route_center": ["b"], "route_right": ["e"]},
     ("6", "1"): {"route_left": ["a"], "route_center": ["b"], "route_right": ["e", "c", "d"]},
@@ -203,7 +203,6 @@ async def process_kachaka_queue():
                 
                 current_moving_location = None
                 
-                # ★★★ 修正: 最終的な目的地 (1~6) に到着した場合のみ役割を交代する ★★★
                 swap_triggers = ["1", "2", "3", "4", "5", "6"]
                 
                 if current_location_name in swap_triggers:
@@ -290,10 +289,17 @@ async def websocket_kachaka_endpoint(websocket: WebSocket):
                 
                 destination_requests[user_id] = {"location": data.get("location")}
                 
+                # ★★★ 修正: プレビュー用にルート情報と目的地を送る ★★★
+                dest_name = data.get("location")["name"]
+                route_key = (current_location_name, dest_name)
+                available_routes = ROUTE_PATTERNS.get(route_key, DEFAULT_ROUTE)
+
                 await send_status_to_all_clients({
                     "type": "WAITING_FOR_ROUTE", 
-                    "message": f"目的地「{data['location']['name']}」選択済", 
-                    "for_user": partner_id
+                    "message": f"目的地「{dest_name}」選択済", 
+                    "for_user": partner_id,
+                    "route_options": available_routes, # ルート情報
+                    "target_destination": dest_name    # 最終目的地名
                 })
                 await websocket.send_json({"type": "WAITING_FOR_ROUTE", "message": "パートナーの経路選択を待っています..."})
 

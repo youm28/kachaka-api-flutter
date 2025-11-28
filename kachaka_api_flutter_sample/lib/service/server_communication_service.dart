@@ -14,9 +14,11 @@ final robotStatusProvider = StateProvider<String>((ref) => 'idle');
 final currentLocationProvider = StateProvider<String>((ref) => '充電ドック');
 final uiModeProvider = StateProvider<String>((ref) => 'destination');
 final isSystemReadyProvider = StateProvider<bool>((ref) => false);
-
-// ★★★ 追加: 現在の目的地選択権を持つユーザーID ★★★
 final destinationSelectorProvider = StateProvider<String>((ref) => 'user_1');
+
+// ★★★ 追加: ルートプレビュー用のProvider ★★★
+final routeOptionsProvider = StateProvider<Map<String, dynamic>>((ref) => {});
+final targetDestinationProvider = StateProvider<String?>((ref) => null);
 
 final serverCommunicationServiceProvider =
     Provider((ref) => ServerCommunicationService(ref));
@@ -48,7 +50,6 @@ class ServerCommunicationService {
               _ref.read(currentLocationProvider.notifier).state =
                   data['current_location'];
             }
-            // ★ 初期状態の権利者を保存
             if (data['destination_selector'] != null) {
               _ref.read(destinationSelectorProvider.notifier).state =
                   data['destination_selector'];
@@ -58,7 +59,6 @@ class ServerCommunicationService {
           case 'connection_status':
             final isReady = data['ready'] as bool;
             _ref.read(isSystemReadyProvider.notifier).state = isReady;
-            // 接続状態と一緒に権利者情報も来る場合がある
             if (data['destination_selector'] != null) {
               _ref.read(destinationSelectorProvider.notifier).state =
                   data['destination_selector'];
@@ -71,7 +71,6 @@ class ServerCommunicationService {
                     "パートナーの接続を待っています...";
               }
             } else {
-              // 準備完了時のメッセージ復帰
               _updateIdleMessage();
             }
             break;
@@ -80,12 +79,21 @@ class ServerCommunicationService {
             _ref.read(cooperationMessageProvider.notifier).state =
                 data['message'];
 
-            // 自分が目的地選択者なら待機モード、そうでなければ経路選択モード
+            // ★★★ 追加: ルート情報と目的地の保存 ★★★
+            if (data['route_options'] != null) {
+              _ref.read(routeOptionsProvider.notifier).state =
+                  Map<String, dynamic>.from(data['route_options']);
+            }
+            if (data['target_destination'] != null) {
+              _ref.read(targetDestinationProvider.notifier).state =
+                  data['target_destination'];
+            }
+
             final selector = _ref.read(destinationSelectorProvider);
             if (userId == selector) {
               _ref.read(uiModeProvider.notifier).state = 'waiting';
               _ref.read(cooperationMessageProvider.notifier).state =
-                  "パートナーが経路を選択しています";
+                  "ユーザ２が経路を選択しています";
             } else {
               _ref.read(uiModeProvider.notifier).state = 'route';
             }
@@ -105,7 +113,6 @@ class ServerCommunicationService {
               _ref.read(currentLocationProvider.notifier).state =
                   data['current_location'];
             }
-            // ★ 移動完了時に次の権利者が送られてくるので更新
             if (data['destination_selector'] != null) {
               _ref.read(destinationSelectorProvider.notifier).state =
                   data['destination_selector'];
@@ -113,6 +120,10 @@ class ServerCommunicationService {
 
             if (status == 'idle' || status == 'error') {
               _ref.read(uiModeProvider.notifier).state = 'destination';
+              // クリア
+              _ref.read(routeOptionsProvider.notifier).state = {};
+              _ref.read(targetDestinationProvider.notifier).state = null;
+
               _updateIdleMessage();
             } else if (status == 'moving') {
               _ref.read(cooperationMessageProvider.notifier).state =
@@ -139,12 +150,10 @@ class ServerCommunicationService {
     }
   }
 
-  // アイドル時のメッセージを役割に応じて更新するヘルパー
   void _updateIdleMessage() {
     final userId = _ref.read(userIdProvider);
     final selector = _ref.read(destinationSelectorProvider);
 
-    // システム準備ができていない場合は上書きしない
     if (!_ref.read(isSystemReadyProvider)) return;
 
     if (userId == selector) {
