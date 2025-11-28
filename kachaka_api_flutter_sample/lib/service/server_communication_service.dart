@@ -17,6 +17,9 @@ final currentLocationProvider = StateProvider<String>((ref) => '充電ドック'
 
 final uiModeProvider = StateProvider<String>((ref) => 'destination');
 
+// 2人が揃っているかどうかのフラグ
+final isSystemReadyProvider = StateProvider<bool>((ref) => false);
+
 final serverCommunicationServiceProvider =
     Provider((ref) => ServerCommunicationService(ref));
 
@@ -43,28 +46,56 @@ class ServerCommunicationService {
             _ref.read(cooperationMessageProvider.notifier).state =
                 data['message'] ?? 'どこに行きますか？';
 
-            // ★ 接続時に現在地を更新
             if (data['current_location'] != null) {
               _ref.read(currentLocationProvider.notifier).state =
                   data['current_location'];
             }
+            break;
 
-            if (data['user_id'] == 'user_2') {
-              _ref.read(uiModeProvider.notifier).state = 'route';
+          case 'connection_status':
+            final isReady = data['ready'] as bool;
+            _ref.read(isSystemReadyProvider.notifier).state = isReady;
+
+            // 揃っていない時のメッセージ更新
+            if (!isReady) {
+              final currentMsg = _ref.read(cooperationMessageProvider);
+              // 移動中などの重要なメッセージでなければ待機メッセージを出す
+              if (!currentMsg.contains("向かいます")) {
+                _ref.read(cooperationMessageProvider.notifier).state =
+                    "パートナーの接続を待っています...";
+              }
+            } else {
+              // 揃ったときにメッセージを戻す（User1向け）
+              final currentId = _ref.read(userIdProvider);
+              if (currentId == 'user_1') {
+                final currentMsg = _ref.read(cooperationMessageProvider);
+                if (currentMsg.contains("パートナーの接続")) {
+                  _ref.read(cooperationMessageProvider.notifier).state =
+                      "どこに行きますか？";
+                }
+              }
             }
             break;
 
           case 'WAITING_FOR_ROUTE':
+            // デフォルトのメッセージをセット
             _ref.read(cooperationMessageProvider.notifier).state =
                 data['message'];
+
             if (userId == 'user_2') {
               _ref.read(uiModeProvider.notifier).state = 'route';
+            } else if (userId == 'user_1') {
+              _ref.read(uiModeProvider.notifier).state = 'waiting';
+              // ★★★ 修正: User 1 には「ユーザ２が経路を選択しています」と表示 ★★★
+              _ref.read(cooperationMessageProvider.notifier).state =
+                  "ユーザ２が経路を選択しています";
             }
             break;
 
           case 'STARTING_MOVE':
+            // ★★★ 修正: 移動開始時は「選択された目的地へ向かいます」と表示 ★★★
             _ref.read(cooperationMessageProvider.notifier).state =
-                data['message'];
+                "選択された目的地へ向かいます";
             _ref.read(uiModeProvider.notifier).state = 'waiting';
             break;
 
@@ -72,20 +103,22 @@ class ServerCommunicationService {
             final status = data['status'] as String?;
             _ref.read(robotStatusProvider.notifier).state = status ?? 'idle';
 
-            // ★ ステータス通知に含まれる現在地情報を反映
             if (data['current_location'] != null) {
               _ref.read(currentLocationProvider.notifier).state =
                   data['current_location'];
             }
 
             if (status == 'idle' || status == 'error') {
-              _ref.read(uiModeProvider.notifier).state =
-                  userId == 'user_1' ? 'destination' : 'route';
+              _ref.read(uiModeProvider.notifier).state = 'destination';
+
               _ref.read(cooperationMessageProvider.notifier).state =
-                  userId == 'user_1' ? 'どこに行きますか？' : '経路を選択してください';
+                  userId == 'user_1'
+                      ? 'どこに行きますか？'
+                      : 'User 1 が目的地を選ぶのを待っています...';
             } else if (status == 'moving') {
+              // ★★★ 修正: 移動中は「選択された目的地へ向かいます」と表示 ★★★
               _ref.read(cooperationMessageProvider.notifier).state =
-                  "'${data['destination']}'へ移動中です...";
+                  "選択された目的地へ向かいます";
             }
             break;
 

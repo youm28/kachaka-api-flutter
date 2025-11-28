@@ -29,13 +29,11 @@ class HomeScreen extends HookConsumerWidget {
         ref.watch(robotStoreProvider.select((value) => value.pose));
     final mapTransformState = useState(MapTransformState.init());
 
-    // 現在地を取得
     final currentLocation = ref.watch(currentLocationProvider);
 
-    // ★★★ 修正箇所: 操作可能な場所のリストを定義 ★★★
-    const allowedStartLocations = ['充電ドック', '1', '2', '3', '4', '5', '6'];
+    final isSystemReady = ref.watch(isSystemReadyProvider);
 
-    // ★★★ 修正箇所: 現在地が操作可能な場所か判定 ★★★
+    const allowedStartLocations = ['充電ドック', '1', '2', '3', '4', '5', '6'];
     final isAtValidStartLocation =
         allowedStartLocations.contains(currentLocation);
 
@@ -50,7 +48,6 @@ class HomeScreen extends HookConsumerWidget {
           .sendDestinationRequest(targetLocation, robotPose);
     }
 
-    // 目的地リストのフィルタリング
     final availableDestinations = locations.where((l) {
       final restrictedNames = ['充電ドック', 'a', 'b', 'c', 'd', 'e'];
       return !restrictedNames.contains(l.name) &&
@@ -66,20 +63,44 @@ class HomeScreen extends HookConsumerWidget {
 
     final visibleLocations = availableDestinations;
 
-    // ★ 目的地ボタン (User 1)
+    // ★ 目的地ボタン (User 1用)
     Widget buildDestinationButtons() {
+      // User 2 の場合は、状態に応じて表示を切り替える
+      if (userId == 'user_2') {
+        // ★★★ 修正: 移動中または待機中(waiting)なら、移動中のメッセージを表示 ★★★
+        if (isRobotBusy || uiMode == 'waiting') {
+          return const Center(
+            child: Text(
+              "選択された経路で\n向かいます",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 20,
+                  color: Colors.orange,
+                  fontWeight: FontWeight.bold),
+            ),
+          );
+        }
+
+        // それ以外は待機メッセージ
+        return const Center(
+          child: Text(
+            "User 1 が目的地を選択するのを\n待っています...",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18, color: Colors.grey),
+          ),
+        );
+      }
+
       return ListView.separated(
         itemCount: availableDestinations.length,
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           final location = availableDestinations[index];
 
-          // ボタンが押せる条件:
-          // 1. ロボットが移動中(busy)でない
-          // 2. 相手の操作待ち(waiting)でない
-          // 3. ★ 現在地が許可された場所(isAtValidStartLocation)である
-          final bool canPress =
-              !isRobotBusy && uiMode != 'waiting' && isAtValidStartLocation;
+          final bool canPress = !isRobotBusy &&
+              uiMode != 'waiting' &&
+              isAtValidStartLocation &&
+              isSystemReady;
 
           return ElevatedButton(
             onPressed: canPress ? () => sendRequest(location) : null,
@@ -100,7 +121,7 @@ class HomeScreen extends HookConsumerWidget {
       );
     }
 
-    // ★ 経路選択ボタン (User 2)
+    // ★ 経路選択ボタン (User 2用)
     Widget buildRouteButtons() {
       final routes = [
         {'label': '左ルート', 'value': 'route_left', 'color': Colors.pink.shade400},
@@ -123,12 +144,10 @@ class HomeScreen extends HookConsumerWidget {
         itemBuilder: (context, index) {
           final route = routes[index];
 
-          // ボタンが押せる条件:
-          // 1. ロボットが移動中(busy)でない
-          // 2. 相手の操作待ち(waiting)でない
-          // 3. ★ 現在地が許可された場所(isAtValidStartLocation)である
-          final bool canPress =
-              !isRobotBusy && uiMode != 'waiting' && isAtValidStartLocation;
+          final bool canPress = !isRobotBusy &&
+              uiMode != 'waiting' &&
+              isAtValidStartLocation &&
+              isSystemReady;
 
           return ElevatedButton(
             onPressed: canPress
@@ -152,9 +171,10 @@ class HomeScreen extends HookConsumerWidget {
       );
     }
 
-    // メッセージの表示内容を調整（無効な場所にいる場合）
     String displayMessage = cooperationMessage;
-    if (!isAtValidStartLocation && !isRobotBusy && uiMode != 'waiting') {
+    if (!isSystemReady) {
+      displayMessage = "パートナーの接続を待っています...";
+    } else if (!isAtValidStartLocation && !isRobotBusy && uiMode != 'waiting') {
       displayMessage = "指定外の場所($currentLocation)にいます。\n操作できません。";
     }
 
@@ -170,17 +190,18 @@ class HomeScreen extends HookConsumerWidget {
               height: 80,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                // 無効な場所にいるときはグレーにする
-                color: !isAtValidStartLocation && !isRobotBusy
-                    ? Colors.grey.shade300
-                    : (uiMode == 'route'
-                        ? Colors.purple.shade50
-                        : (robotStatus == 'moving'
-                            ? Colors.orange.shade100
-                            : Colors.blue.shade50)),
+                color:
+                    !isSystemReady || (!isAtValidStartLocation && !isRobotBusy)
+                        ? Colors.grey.shade300
+                        : (uiMode == 'route'
+                            ? Colors.purple.shade50
+                            : (robotStatus == 'moving'
+                                ? Colors.orange.shade100
+                                : Colors.blue.shade50)),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                    color: !isAtValidStartLocation && !isRobotBusy
+                    color: !isSystemReady ||
+                            (!isAtValidStartLocation && !isRobotBusy)
                         ? Colors.grey.shade500
                         : (uiMode == 'route'
                             ? Colors.purple.shade300
@@ -195,7 +216,8 @@ class HomeScreen extends HookConsumerWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                     fontSize: 16,
-                    color: !isAtValidStartLocation && !isRobotBusy
+                    color: !isSystemReady ||
+                            (!isAtValidStartLocation && !isRobotBusy)
                         ? Colors.black54
                         : (uiMode == 'route'
                             ? Colors.purple.shade900
@@ -240,11 +262,11 @@ class HomeScreen extends HookConsumerWidget {
                       mapInfo: mapInfo,
                       pins: [
                         ...visibleLocations.map((e) => _locationPin(e, () {
-                              // ピンのタップイベントも同様に制限
                               if (!isRobotBusy &&
                                   uiMode != 'waiting' &&
                                   userId == 'user_1' &&
-                                  isAtValidStartLocation) {
+                                  isAtValidStartLocation &&
+                                  isSystemReady) {
                                 sendRequest(e);
                               }
                             })),
