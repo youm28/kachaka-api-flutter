@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // キーボード操作用
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kachaka_api_flutter_sample/model/map_transform_state.dart';
 import 'package:kachaka_api_flutter_sample/model/pin_model.dart';
 import 'package:kachaka_api_flutter_sample/service/server_communication_service.dart';
+import 'package:kachaka_api_flutter_sample/service/servo_service.dart'; // Servo用インポート
 import 'package:kachaka_api_flutter_sample/stores/location/location_store.dart';
 import 'package:kachaka_api_flutter_sample/stores/map/map_store.dart';
 import 'package:kachaka_api_flutter_sample/stores/robot/robot_store.dart';
@@ -15,6 +17,12 @@ class HomeScreen extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // ★ 追加: 初回ビルド時にServoサーバーへも接続
+    useEffect(() {
+      ref.read(servoServiceProvider).connect();
+      return null;
+    }, []);
+
     final robotStatus = ref.watch(robotStatusProvider);
     final cooperationMessage = ref.watch(cooperationMessageProvider);
     final uiMode = ref.watch(uiModeProvider);
@@ -33,21 +41,52 @@ class HomeScreen extends HookConsumerWidget {
     final isSystemReady = ref.watch(isSystemReadyProvider);
     final destinationSelector = ref.watch(destinationSelectorProvider);
 
-    // ★★★ 追加: ルートプレビュー用のデータ ★★★
     final routeOptions = ref.watch(routeOptionsProvider);
     final targetDestination = ref.watch(targetDestinationProvider);
-    final selectedPreviewRoute = useState<String?>(null); // 現在プレビュー中のルート
+    final selectedPreviewRoute = useState<String?>(null);
 
     const allowedStartLocations = ['充電ドック', '1', '2', '3', '4', '5', '6'];
     final isAtValidStartLocation =
         allowedStartLocations.contains(currentLocation);
 
-    // ★★★ 追加: プレビューパスの生成 ★★★
+    // ★ 追加: キーボード入力ハンドラ (矢印キー・左右反転)
+    void handleKeyEvent(KeyEvent event) {
+      if (userId == null) return;
+
+      // キー押し込み(Down)と離した(Up)のみ処理
+      if (event is! KeyDownEvent && event is! KeyUpEvent) return;
+
+      final isPressed = event is KeyDownEvent;
+      final servoService = ref.read(servoServiceProvider);
+
+      // 矢印キーの割り当て (左右反転設定)
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        // 右キー -> 逆方向 (Negative/Decrease) へ
+        debugPrint("➡️ Arrow Right (Pressed: $isPressed) -> Sending Negative");
+        servoService.handleKeyInput(
+            axis: 'horizontal', isPositive: false, isPressed: isPressed);
+      } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        // 左キー -> 逆方向 (Positive/Increase) へ
+        debugPrint("⬅️ Arrow Left (Pressed: $isPressed) -> Sending Positive");
+        servoService.handleKeyInput(
+            axis: 'horizontal', isPositive: true, isPressed: isPressed);
+      } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        // 上キー -> 正方向 (Positive/Increase)
+        debugPrint("⬆️ Arrow Up (Pressed: $isPressed)");
+        servoService.handleKeyInput(
+            axis: 'vertical', isPositive: true, isPressed: isPressed);
+      } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        // 下キー -> 負方向 (Negative/Decrease)
+        debugPrint("⬇️ Arrow Down (Pressed: $isPressed)");
+        servoService.handleKeyInput(
+            axis: 'vertical', isPositive: false, isPressed: isPressed);
+      }
+    }
+
+    // プレビューパスの生成
     List<Pose>? previewPath;
     if (selectedPreviewRoute.value != null && robotPose != null) {
-      final path = [robotPose]; // 1. スタート地点 (ロボット)
-
-      // 2. 経由地
+      final path = [robotPose];
       final waypointsNames =
           routeOptions[selectedPreviewRoute.value] as List<dynamic>? ?? [];
       for (var name in waypointsNames) {
@@ -57,8 +96,6 @@ class HomeScreen extends HookConsumerWidget {
           path.add(loc.pose);
         }
       }
-
-      // 3. 最終目的地
       if (targetDestination != null) {
         final destLoc = locations.firstWhere((l) => l.name == targetDestination,
             orElse: () => Location());
@@ -95,7 +132,6 @@ class HomeScreen extends HookConsumerWidget {
 
     final visibleLocations = availableDestinations;
 
-    // ★ 目的地ボタン
     Widget buildDestinationButtons() {
       if (userId != destinationSelector) {
         if (isRobotBusy || uiMode == 'waiting') {
@@ -148,7 +184,6 @@ class HomeScreen extends HookConsumerWidget {
       );
     }
 
-    // ★ 経路選択ボタン (プレビュー機能付き)
     Widget buildRouteButtons() {
       final routes = [
         {'label': '左ルート', 'value': 'route_left', 'color': Colors.pink.shade400},
@@ -184,13 +219,11 @@ class HomeScreen extends HookConsumerWidget {
                 return ElevatedButton(
                   onPressed: canPress
                       ? () {
-                          // ★ タップしたらプレビュー状態にする (送信はしない)
                           selectedPreviewRoute.value = value;
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: route['color'] as Color,
-                    // 選択中は枠線で強調
                     side: isSelected
                         ? const BorderSide(color: Colors.white, width: 4)
                         : null,
@@ -216,16 +249,14 @@ class HomeScreen extends HookConsumerWidget {
               },
             ),
           ),
-          // ★★★ 決定ボタン (プレビュー選択時のみ表示) ★★★
           if (selectedPreviewRoute.value != null)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: ElevatedButton(
                 onPressed: () {
-                  // ここで送信
                   serverCommService
                       .sendRouteSelection(selectedPreviewRoute.value!);
-                  selectedPreviewRoute.value = null; // リセット
+                  selectedPreviewRoute.value = null;
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
@@ -317,40 +348,48 @@ class HomeScreen extends HookConsumerWidget {
       ),
     );
 
-    return Scaffold(
-      body: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: mapInfo == null
-                ? AspectRatio(
-                    aspectRatio: 1.0,
-                    child: Container(
-                        color: const Color(0xFFF8F1F8),
-                        child:
-                            const Center(child: CircularProgressIndicator())))
-                : AspectRatio(
-                    aspectRatio: 1.0,
-                    child: MapWidget(
-                      mapInfo: mapInfo,
-                      pins: [
-                        ...visibleLocations.map((e) => _locationPin(e, () {
-                              if (!isRobotBusy &&
-                                  uiMode != 'waiting' &&
-                                  userId == destinationSelector &&
-                                  isAtValidStartLocation &&
-                                  isSystemReady) {
-                                sendRequest(e);
-                              }
-                            })),
-                      ],
-                      mapTransformState: mapTransformState,
-                      previewPath: previewPath, // ★ MapWidgetにプレビューパスを渡す
+    // ★ 追加: FocusをScaffoldの外側に配置し、画面全体で入力を確実に受け取る
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        handleKeyEvent(event);
+        return KeyEventResult.handled;
+      },
+      child: Scaffold(
+        body: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: mapInfo == null
+                  ? AspectRatio(
+                      aspectRatio: 1.0,
+                      child: Container(
+                          color: const Color(0xFFF8F1F8),
+                          child:
+                              const Center(child: CircularProgressIndicator())))
+                  : AspectRatio(
+                      aspectRatio: 1.0,
+                      child: MapWidget(
+                        mapInfo: mapInfo,
+                        pins: [
+                          ...visibleLocations.map((e) => _locationPin(e, () {
+                                if (!isRobotBusy &&
+                                    uiMode != 'waiting' &&
+                                    userId == destinationSelector &&
+                                    isAtValidStartLocation &&
+                                    isSystemReady) {
+                                  sendRequest(e);
+                                }
+                              })),
+                        ],
+                        mapTransformState: mapTransformState,
+                        previewPath: previewPath,
+                      ),
                     ),
-                  ),
-          ),
-          questionArea,
-        ],
+            ),
+            questionArea,
+          ],
+        ),
       ),
     );
   }
