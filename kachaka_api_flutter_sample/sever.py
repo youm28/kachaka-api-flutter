@@ -359,8 +359,8 @@ servo_lock = threading.Lock()
 def move_servo(physical_id, servo_instance, angle):
     with servo_lock:
         if servo_instance:
-            # 角度制限 (-60 ~ 60)
-            angle = max(-60, min(angle, 60))
+            # 角度制限 (-40 ~ 40度)
+            angle = max(-40, min(angle, 40))
             servo_instance.move(angle)
             current_angles[physical_id] = angle
 
@@ -385,7 +385,7 @@ def servo_thread_loop():
                 
                 if target_servo:
                     current_angle = current_angles.get(physical_id, 0)
-                    step = 2.0  # 移動速度
+                    step = 0.4  # 移動速度
                     
                     if direction == "increase":
                         current_angle += step
@@ -397,7 +397,7 @@ def servo_thread_loop():
         except Exception as e:
             print(f"Servo Loop Error: {e}")
             
-        time.sleep(0.02) # 50Hz制御
+        time.sleep(0.01) # 100Hz制御
 
 @app.websocket("/ws/servo")
 async def websocket_servo_endpoint(websocket: WebSocket):
