@@ -7,8 +7,10 @@
           "type": "dart",
           "flutterMode": "debug",
           "args": [
-            // カチャカのIPアドレスを設定
-              "--dart-define=IP_ADDRESS=10.40.5.108"
+            // カチャカのIPアドレス(研究室) 10.40.5.108
+            // カチャカのIPアドレス(H509) 10.40.42.28
+              "--dart-define=IP_ADDRESS=10.40.42.28" 
+
           ]
       }
   ]
