@@ -4,7 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kachaka_api_flutter_sample/model/map_transform_state.dart';
 import 'package:kachaka_api_flutter_sample/model/pin_model.dart';
 import 'package:kachaka_api_flutter_sample/service/server_communication_service.dart';
-import 'package:kachaka_api_flutter_sample/service/servo_service.dart'; // Servo用インポート
+import 'package:kachaka_api_flutter_sample/service/servo_service.dart';
 import 'package:kachaka_api_flutter_sample/stores/location/location_store.dart';
 import 'package:kachaka_api_flutter_sample/stores/map/map_store.dart';
 import 'package:kachaka_api_flutter_sample/stores/robot/robot_store.dart';
@@ -61,22 +61,18 @@ class HomeScreen extends HookConsumerWidget {
 
       // 矢印キーの割り当て (左右反転設定)
       if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-        // 右キー -> 逆方向 (Negative/Decrease) へ
         debugPrint("➡️ Arrow Right (Pressed: $isPressed) -> Sending Negative");
         servoService.handleKeyInput(
             axis: 'horizontal', isPositive: false, isPressed: isPressed);
       } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-        // 左キー -> 逆方向 (Positive/Increase) へ
         debugPrint("⬅️ Arrow Left (Pressed: $isPressed) -> Sending Positive");
         servoService.handleKeyInput(
             axis: 'horizontal', isPositive: true, isPressed: isPressed);
       } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-        // 上キー -> 正方向 (Positive/Increase)
         debugPrint("⬆️ Arrow Up (Pressed: $isPressed)");
         servoService.handleKeyInput(
             axis: 'vertical', isPositive: true, isPressed: isPressed);
       } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-        // 下キー -> 負方向 (Negative/Decrease)
         debugPrint("⬇️ Arrow Down (Pressed: $isPressed)");
         servoService.handleKeyInput(
             axis: 'vertical', isPositive: false, isPressed: isPressed);
@@ -413,11 +409,14 @@ class HomeScreen extends HookConsumerWidget {
     );
     const double estimatedHeight = 18;
     final double estimatedWidth = location.name.length * 10.0 + 16.0;
+
     return PinModel(
       pose: location.pose,
-      pinCenterOffset: Offset(estimatedHeight / 2, estimatedWidth / 2),
+      // 修正: 回転なし(0)なので、幅(dx)と高さ(dy)を素直に割り当て
+      pinCenterOffset: Offset(estimatedWidth / 2, estimatedHeight / 2),
       onTap: onTap,
-      child: RotatedBox(quarterTurns: 1, child: pinLabel),
+      // 修正: マップが回転していないので、ラベルも回転させない (0)
+      child: RotatedBox(quarterTurns: 0, child: pinLabel),
     );
   }
 }

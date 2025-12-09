@@ -8,42 +8,42 @@ import 'package:kachaka_api_flutter_sample/utils/helpers/map_helper.dart';
 import 'package:kachaka_api_flutter_sample/widgets/map_image.dart';
 import 'package:kachaka_api_flutter_sample/widgets/robot_widget.dart';
 import 'package:kachaka_api/kachaka_api.dart';
-import 'package:kachaka_api_flutter_sample/widgets/map_arrow_painter.dart'; // 追加
+import 'package:kachaka_api_flutter_sample/widgets/map_arrow_painter.dart';
 
 class MapWidget extends HookConsumerWidget {
   final Map_ mapInfo;
   final List<PinModel> pins;
   final ValueNotifier<MapTransformState> mapTransformState;
-  final List<Pose>? previewPath; // 追加
+  final List<Pose>? previewPath;
 
   const MapWidget({
     super.key,
     required this.mapInfo,
     required this.pins,
     required this.mapTransformState,
-    this.previewPath, // 追加
+    this.previewPath,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return LayoutBuilder(builder: (context, constraints) {
-      final swappedConstraints = BoxConstraints(
-        maxWidth: constraints.maxHeight,
-        maxHeight: constraints.maxWidth,
-      );
+      // 修正: 縦横の入れ替え(swappedConstraints)を削除し、そのままのconstraintsを使用
 
       return HookBuilder(builder: (context) {
         final transformationController = useTransformationController();
+
+        // 修正: constraintsをそのまま渡す
         final mapLayout = useMemoized(
             () => MapHelper.calcMapSize(
                   mapInfo: mapInfo,
-                  constraints: swappedConstraints,
+                  constraints: constraints,
                 ),
-            [mapInfo, swappedConstraints]);
+            [mapInfo, constraints]);
 
         useEffect(() {
-          final scaleX = swappedConstraints.maxWidth / mapLayout.mapWidth;
-          final scaleY = swappedConstraints.maxHeight / mapLayout.mapHeight;
+          // 修正: ここも constraints を使用してスケール計算
+          final scaleX = constraints.maxWidth / mapLayout.mapWidth;
+          final scaleY = constraints.maxHeight / mapLayout.mapHeight;
           final initialScale = math.min(scaleX, scaleY);
 
           transformationController.value = Matrix4.identity()
@@ -76,7 +76,7 @@ class MapWidget extends HookConsumerWidget {
         }
 
         return RotatedBox(
-          quarterTurns: 3,
+          quarterTurns: 0, // 回転なし
           child: InteractiveViewer(
             transformationController: transformationController,
             maxScale: double.infinity,
