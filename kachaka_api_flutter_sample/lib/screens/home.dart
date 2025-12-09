@@ -114,7 +114,18 @@ class HomeScreen extends HookConsumerWidget {
     }
 
     final availableDestinations = locations.where((l) {
-      final restrictedNames = ['充電ドック', 'a', 'b', 'c', 'd', 'e'];
+      final restrictedNames = [
+        '充電ドック',
+        'a',
+        'b',
+        'c',
+        'd',
+        'e',
+        "f",
+        "g",
+        "h",
+        "i"
+      ];
       return !restrictedNames.contains(l.name) &&
           l.name != currentLocation &&
           l.type != LocationType.LOCATION_TYPE_SHELF_HOME;
@@ -182,14 +193,18 @@ class HomeScreen extends HookConsumerWidget {
 
     Widget buildRouteButtons() {
       final routes = [
-        {'label': '左ルート', 'value': 'route_left', 'color': Colors.pink.shade400},
         {
-          'label': '中央ルート',
+          'label': '最短ルートで向かう',
+          'value': 'route_left',
+          'color': Colors.pink.shade400
+        },
+        {
+          'label': '少し他を見て向かう',
           'value': 'route_center',
           'color': Colors.purple.shade500
         },
         {
-          'label': '右ルート',
+          'label': 'ぐるっと他を見て向かう',
           'value': 'route_right',
           'color': Colors.indigo.shade500
         },
