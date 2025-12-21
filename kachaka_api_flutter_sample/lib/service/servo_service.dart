@@ -4,9 +4,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'server_communication_service.dart'; // userIdProviderのためにインポート
 
-const String _serverIp = "10.40.42.24";
+const String _serverIp = "10.40.42.2";
 // PCサーバーのIPアドレス(研究室) 10.40.5.55
-// PCサーバーのIPアドレス(実験室) 10.40.42.24
+// PCサーバーのIPアドレス(実験室) 10.40.42.0
 const int _serverPort = 8000;
 
 final servoServiceProvider = Provider((ref) => ServoService(ref));

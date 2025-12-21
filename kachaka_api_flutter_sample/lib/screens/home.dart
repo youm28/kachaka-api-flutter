@@ -45,7 +45,21 @@ class HomeScreen extends HookConsumerWidget {
     final targetDestination = ref.watch(targetDestinationProvider);
     final selectedPreviewRoute = useState<String?>(null);
 
-    const allowedStartLocations = ['充電ドック', '1', '2', '3', '4', '5', '6'];
+    // ★★★ 修正: 開始可能な位置を 1~11 に拡張 ★★★
+    const allowedStartLocations = [
+      '充電ドック',
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+      '7',
+      '8',
+      '9',
+      '10',
+      '11'
+    ];
     final isAtValidStartLocation =
         allowedStartLocations.contains(currentLocation);
 
@@ -114,6 +128,7 @@ class HomeScreen extends HookConsumerWidget {
     }
 
     final availableDestinations = locations.where((l) {
+      // ★★★ 修正: 経由地リストを 'f' までに制限 (g,h,iは除外) ★★★
       final restrictedNames = [
         '充電ドック',
         'a',
@@ -121,10 +136,7 @@ class HomeScreen extends HookConsumerWidget {
         'c',
         'd',
         'e',
-        "f",
-        "g",
-        "h",
-        "i"
+        'f',
       ];
       return !restrictedNames.contains(l.name) &&
           l.name != currentLocation &&
@@ -162,6 +174,21 @@ class HomeScreen extends HookConsumerWidget {
         );
       }
 
+      // ★★★ 追加: ボタン表示用の名前マッピング定義 ★★★
+      const Map<String, String> displayNames = {
+        '1': '1 幾何学的な旋律',
+        '2': '2 フィルターバブルの安住',
+        '3': '3 タイムラプスの人生',
+        '4': '4 既読無視の空白',
+        '5': '5 アバターと肉体の乖離',
+        '6': '6 終わりのないスクロール',
+        '7': '7 監視下の透明人間',
+        '8': '8 エコーチェンバーの共鳴',
+        '9': '9 ログアウト後の残響',
+        '10': '10 液状化するデータ',
+        '11': '11 電子の雨、孤独な傘',
+      };
+
       return ListView.separated(
         itemCount: availableDestinations.length,
         separatorBuilder: (context, index) => const SizedBox(height: 12),
@@ -172,6 +199,11 @@ class HomeScreen extends HookConsumerWidget {
               isAtValidStartLocation &&
               isSystemReady;
 
+          // ★★★ 追加: 表示名の取得 ★★★
+          // マッピングに定義があればそれを使い、なければ元の名前(1, 2等)を使います
+          final String buttonLabel =
+              displayNames[location.name] ?? location.name;
+
           return ElevatedButton(
             onPressed: canPress ? () => sendRequest(location) : null,
             style: ElevatedButton.styleFrom(
@@ -181,7 +213,8 @@ class HomeScreen extends HookConsumerWidget {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
-            child: Text(location.name,
+            // ★★★ 変更: location.name を buttonLabel に変更 ★★★
+            child: Text(buttonLabel,
                 style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
