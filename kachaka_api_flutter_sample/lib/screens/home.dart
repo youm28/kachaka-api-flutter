@@ -1,3 +1,4 @@
+import 'dart:async'; // Timer用
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // キーボード操作用
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -40,12 +41,32 @@ class HomeScreen extends HookConsumerWidget {
     final currentLocation = ref.watch(currentLocationProvider);
     final isSystemReady = ref.watch(isSystemReadyProvider);
     final destinationSelector = ref.watch(destinationSelectorProvider);
+    // ★ 追加: クールダウン終了時刻を取得
+    final cooldownUntil = ref.watch(cooldownUntilProvider);
 
     final routeOptions = ref.watch(routeOptionsProvider);
     final targetDestination = ref.watch(targetDestinationProvider);
     final selectedPreviewRoute = useState<String?>(null);
 
-    // ★★★ 修正: 開始可能な位置を 1~11 に拡張 ★★★
+    // ★ 追加: クールダウン残り時間の状態管理
+    final remainingCooldown = useState<int>(0);
+
+    // ★ 追加: 定期タイマーでクールダウン残り時間を更新
+    useEffect(() {
+      final timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        final now = DateTime.now().millisecondsSinceEpoch / 1000.0;
+        final diff = (cooldownUntil - now).ceil();
+        if (diff > 0) {
+          remainingCooldown.value = diff;
+        } else {
+          remainingCooldown.value = 0;
+        }
+      });
+      return timer.cancel;
+    }, [cooldownUntil]);
+
+    final isCoolingDown = remainingCooldown.value > 0;
+
     const allowedStartLocations = [
       '充電ドック',
       '1',
@@ -63,17 +84,13 @@ class HomeScreen extends HookConsumerWidget {
     final isAtValidStartLocation =
         allowedStartLocations.contains(currentLocation);
 
-    // ★ 追加: キーボード入力ハンドラ (矢印キー・左右反転)
     void handleKeyEvent(KeyEvent event) {
       if (userId == null) return;
-
-      // キー押し込み(Down)と離した(Up)のみ処理
       if (event is! KeyDownEvent && event is! KeyUpEvent) return;
 
       final isPressed = event is KeyDownEvent;
       final servoService = ref.read(servoServiceProvider);
 
-      // 矢印キーの割り当て (左右反転設定)
       if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
         debugPrint("➡️ Arrow Right (Pressed: $isPressed) -> Sending Negative");
         servoService.handleKeyInput(
@@ -93,7 +110,6 @@ class HomeScreen extends HookConsumerWidget {
       }
     }
 
-    // プレビューパスの生成
     List<Pose>? previewPath;
     if (selectedPreviewRoute.value != null && robotPose != null) {
       final path = [robotPose];
@@ -128,7 +144,6 @@ class HomeScreen extends HookConsumerWidget {
     }
 
     final availableDestinations = locations.where((l) {
-      // ★★★ 修正: 経由地リストを 'f' までに制限 (g,h,iは除外) ★★★
       final restrictedNames = [
         '充電ドック',
         'a',
@@ -174,7 +189,6 @@ class HomeScreen extends HookConsumerWidget {
         );
       }
 
-      // ★★★ 追加: ボタン表示用の名前マッピング定義 ★★★
       const Map<String, String> displayNames = {
         '1': '1 幾何学的な旋律',
         '2': '2 フィルターバブルの安住',
@@ -197,10 +211,9 @@ class HomeScreen extends HookConsumerWidget {
           final bool canPress = !isRobotBusy &&
               uiMode != 'waiting' &&
               isAtValidStartLocation &&
-              isSystemReady;
+              isSystemReady &&
+              !isCoolingDown; // ★ クールダウン中は押せない
 
-          // ★★★ 追加: 表示名の取得 ★★★
-          // マッピングに定義があればそれを使い、なければ元の名前(1, 2等)を使います
           final String buttonLabel =
               displayNames[location.name] ?? location.name;
 
@@ -213,7 +226,6 @@ class HomeScreen extends HookConsumerWidget {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
-            // ★★★ 変更: location.name を buttonLabel に変更 ★★★
             child: Text(buttonLabel,
                 style: const TextStyle(
                     fontSize: 20,
@@ -258,7 +270,8 @@ class HomeScreen extends HookConsumerWidget {
                 final bool canPress = !isRobotBusy &&
                     uiMode != 'waiting' &&
                     isAtValidStartLocation &&
-                    isSystemReady;
+                    isSystemReady &&
+                    !isCoolingDown;
 
                 return ElevatedButton(
                   onPressed: canPress
@@ -322,6 +335,9 @@ class HomeScreen extends HookConsumerWidget {
     String displayMessage = cooperationMessage;
     if (!isSystemReady) {
       displayMessage = "パートナーの接続を待っています...";
+    } else if (isCoolingDown) {
+      // ★ クールダウン中のメッセージ
+      displayMessage = "到着後の待機時間です。\nあと ${remainingCooldown.value} 秒...";
     } else if (!isAtValidStartLocation && !isRobotBusy && uiMode != 'waiting') {
       displayMessage = "指定外の場所($currentLocation)にいます。\n操作できません。";
     }
@@ -338,24 +354,28 @@ class HomeScreen extends HookConsumerWidget {
               height: 80,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color:
-                    !isSystemReady || (!isAtValidStartLocation && !isRobotBusy)
+                color: isCoolingDown
+                    ? Colors.grey.shade300 // ★ クールダウン中の色
+                    : (!isSystemReady ||
+                            (!isAtValidStartLocation && !isRobotBusy)
                         ? Colors.grey.shade300
                         : (uiMode == 'route'
                             ? Colors.purple.shade50
                             : (robotStatus == 'moving'
                                 ? Colors.orange.shade100
-                                : Colors.blue.shade50)),
+                                : Colors.blue.shade50))),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                    color: !isSystemReady ||
-                            (!isAtValidStartLocation && !isRobotBusy)
+                    color: isCoolingDown
                         ? Colors.grey.shade500
-                        : (uiMode == 'route'
-                            ? Colors.purple.shade300
-                            : (robotStatus == 'moving'
-                                ? Colors.orange.shade300
-                                : Colors.blue.shade200)),
+                        : (!isSystemReady ||
+                                (!isAtValidStartLocation && !isRobotBusy)
+                            ? Colors.grey.shade500
+                            : (uiMode == 'route'
+                                ? Colors.purple.shade300
+                                : (robotStatus == 'moving'
+                                    ? Colors.orange.shade300
+                                    : Colors.blue.shade200))),
                     width: 2),
               ),
               alignment: Alignment.center,
@@ -365,7 +385,8 @@ class HomeScreen extends HookConsumerWidget {
                 style: TextStyle(
                     fontSize: 16,
                     color: !isSystemReady ||
-                            (!isAtValidStartLocation && !isRobotBusy)
+                            (!isAtValidStartLocation && !isRobotBusy) ||
+                            isCoolingDown
                         ? Colors.black54
                         : (uiMode == 'route'
                             ? Colors.purple.shade900
@@ -392,7 +413,6 @@ class HomeScreen extends HookConsumerWidget {
       ),
     );
 
-    // ★ 追加: FocusをScaffoldの外側に配置し、画面全体で入力を確実に受け取る
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
@@ -421,7 +441,8 @@ class HomeScreen extends HookConsumerWidget {
                                     uiMode != 'waiting' &&
                                     userId == destinationSelector &&
                                     isAtValidStartLocation &&
-                                    isSystemReady) {
+                                    isSystemReady &&
+                                    !isCoolingDown) {
                                   sendRequest(e);
                                 }
                               })),
@@ -460,10 +481,8 @@ class HomeScreen extends HookConsumerWidget {
 
     return PinModel(
       pose: location.pose,
-      // 修正: 回転なし(0)なので、幅(dx)と高さ(dy)を素直に割り当て
       pinCenterOffset: Offset(estimatedWidth / 2, estimatedHeight / 2),
       onTap: onTap,
-      // 修正: マップが回転していないので、ラベルも回転させない (0)
       child: RotatedBox(quarterTurns: 0, child: pinLabel),
     );
   }

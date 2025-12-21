@@ -4,7 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kachaka_api/kachaka_api.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-const String _serverIp = "10.40.42.2";
+const String _serverIp = "10.40.42.5";
 // PCサーバーのIPアドレス(研究室) 10.40.5.55
 // PCサーバーのIPアドレス(実験室) 10.40.42.0
 const int _serverPort = 8000;
@@ -21,6 +21,9 @@ final destinationSelectorProvider = StateProvider<String>((ref) => 'user_1');
 // ★★★ 追加: ルートプレビュー用のProvider ★★★
 final routeOptionsProvider = StateProvider<Map<String, dynamic>>((ref) => {});
 final targetDestinationProvider = StateProvider<String?>((ref) => null);
+
+// ★★★ 追加: クールダウン終了時刻(Unix timestamp: seconds) ★★★
+final cooldownUntilProvider = StateProvider<double>((ref) => 0.0);
 
 final serverCommunicationServiceProvider =
     Provider((ref) => ServerCommunicationService(ref));
@@ -41,6 +44,12 @@ class ServerCommunicationService {
         final data = jsonDecode(message);
         final type = data['type'] as String?;
         final userId = _ref.read(userIdProvider);
+
+        // ★追加: どのメッセージタイプでもクールダウン情報が含まれていれば更新
+        if (data['cooldown_until'] != null) {
+          _ref.read(cooldownUntilProvider.notifier).state =
+              (data['cooldown_until'] as num).toDouble();
+        }
 
         switch (type) {
           case 'user_assigned':
@@ -81,7 +90,6 @@ class ServerCommunicationService {
             _ref.read(cooperationMessageProvider.notifier).state =
                 data['message'];
 
-            // ★★★ 追加: ルート情報と目的地の保存 ★★★
             if (data['route_options'] != null) {
               _ref.read(routeOptionsProvider.notifier).state =
                   Map<String, dynamic>.from(data['route_options']);
@@ -137,6 +145,14 @@ class ServerCommunicationService {
             _ref.read(uiModeProvider.notifier).state = 'destination';
             _ref.read(cooperationMessageProvider.notifier).state =
                 data['message'];
+            break;
+
+          case 'ERROR':
+            // ScaffoldMessengerの代わりにメッセージProviderを更新して安全に通知
+            if (data['message'] != null) {
+              _ref.read(cooperationMessageProvider.notifier).state =
+                  data['message'];
+            }
             break;
         }
       }, onDone: () {
