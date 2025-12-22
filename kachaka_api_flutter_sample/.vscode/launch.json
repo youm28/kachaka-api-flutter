@@ -7,8 +7,7 @@
           "type": "dart",
           "flutterMode": "debug",
           "args": [
-            // カチャカのIPアドレス(研究室) 10.40.5.108
-            // カチャカのIPアドレス(H509) 10.40.42.28
+            // カチャカのIPアドレス
               "--dart-define=IP_ADDRESS=10.40.42.28" 
 
           ]
