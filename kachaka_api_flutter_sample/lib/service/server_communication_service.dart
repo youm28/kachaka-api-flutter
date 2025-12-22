@@ -4,7 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kachaka_api/kachaka_api.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-const String _serverIp = "10.40.42.5";
+const String _serverIp = "10.40.42.10";
 // PCサーバーのIPアドレス(研究室) 10.40.5.55
 // PCサーバーのIPアドレス(実験室) 10.40.42.0
 const int _serverPort = 8000;
@@ -24,6 +24,9 @@ final targetDestinationProvider = StateProvider<String?>((ref) => null);
 
 // ★★★ 追加: クールダウン終了時刻(Unix timestamp: seconds) ★★★
 final cooldownUntilProvider = StateProvider<double>((ref) => 0.0);
+
+// ★★★ 追加: 実験開始状態を管理するProvider ★★★
+final isExperimentStartedProvider = StateProvider<bool>((ref) => false);
 
 final serverCommunicationServiceProvider =
     Provider((ref) => ServerCommunicationService(ref));
@@ -51,6 +54,12 @@ class ServerCommunicationService {
               (data['cooldown_until'] as num).toDouble();
         }
 
+        // ★追加: 実験開始フラグの同期
+        if (data['is_experiment_started'] != null) {
+          _ref.read(isExperimentStartedProvider.notifier).state =
+              data['is_experiment_started'];
+        }
+
         switch (type) {
           case 'user_assigned':
             _ref.read(userIdProvider.notifier).state = data['user_id'];
@@ -65,6 +74,13 @@ class ServerCommunicationService {
               _ref.read(destinationSelectorProvider.notifier).state =
                   data['destination_selector'];
             }
+            break;
+
+          // ★追加: 実験開始通知
+          case 'EXPERIMENT_STARTED':
+            _ref.read(isExperimentStartedProvider.notifier).state = true;
+            _ref.read(cooperationMessageProvider.notifier).state =
+                data['message'] ?? "実験開始！";
             break;
 
           case 'connection_status':
@@ -171,8 +187,14 @@ class ServerCommunicationService {
   void _updateIdleMessage() {
     final userId = _ref.read(userIdProvider);
     final selector = _ref.read(destinationSelectorProvider);
+    final isExperimentStarted = _ref.read(isExperimentStartedProvider); // 追加
 
     if (!_ref.read(isSystemReadyProvider)) return;
+
+    if (!isExperimentStarted) {
+      _ref.read(cooperationMessageProvider.notifier).state = "実験開始待機中...";
+      return;
+    }
 
     if (userId == selector) {
       _ref.read(cooperationMessageProvider.notifier).state = "どこに行きますか？";
@@ -210,6 +232,14 @@ class ServerCommunicationService {
     final command = {"action": "SELECT_ROUTE", "route": route};
     _channel!.sink.add(jsonEncode(command));
     debugPrint('PCサーバーへ経路選択を送信しました: $route');
+  }
+
+  // ★追加: 実験開始リクエストを送信
+  void sendStartExperiment() {
+    if (_channel == null || _channel!.closeCode != null) return;
+    final command = {"action": "START_EXPERIMENT"};
+    _channel!.sink.add(jsonEncode(command));
+    debugPrint('PCサーバーへ実験開始リクエストを送信しました');
   }
 
   void disconnect() {

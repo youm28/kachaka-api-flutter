@@ -48,6 +48,10 @@ class HomeScreen extends HookConsumerWidget {
     final targetDestination = ref.watch(targetDestinationProvider);
     final selectedPreviewRoute = useState<String?>(null);
 
+    // ★ 追加: 実験開始フラグ
+    final isExperimentStarted = ref.watch(isExperimentStartedProvider);
+    final serverCommService = ref.read(serverCommunicationServiceProvider);
+
     // ★ 追加: クールダウン残り時間の状態管理
     final remainingCooldown = useState<int>(0);
 
@@ -167,6 +171,58 @@ class HomeScreen extends HookConsumerWidget {
     final visibleLocations = availableDestinations;
 
     Widget buildDestinationButtons() {
+      // ★★★ 追加: 実験開始前の待機画面 ★★★
+      if (!isExperimentStarted) {
+        if (userId == 'user_1') {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  "実験の準備ができたら\nボタンを押してください",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    serverCommService.sendStartExperiment();
+                  },
+                  icon: const Icon(Icons.play_arrow,
+                      size: 32, color: Colors.white),
+                  label: const Text("計測開始",
+                      style: TextStyle(fontSize: 24, color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 40, vertical: 20),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  "※押した瞬間にログ記録が開始されます",
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ],
+            ),
+          );
+        } else {
+          // User 2 や Spectator の場合
+          return const Center(
+            child: Text(
+              "User 1 が実験を開始するのを\n待っています...",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 20,
+                  color: Colors.grey,
+                  fontWeight: FontWeight.bold),
+            ),
+          );
+        }
+      }
+
       if (userId != destinationSelector) {
         if (isRobotBusy || uiMode == 'waiting') {
           return const Center(
@@ -254,7 +310,6 @@ class HomeScreen extends HookConsumerWidget {
           'color': Colors.indigo.shade500
         },
       ];
-      final serverCommService = ref.read(serverCommunicationServiceProvider);
 
       return Column(
         children: [
@@ -335,6 +390,9 @@ class HomeScreen extends HookConsumerWidget {
     String displayMessage = cooperationMessage;
     if (!isSystemReady) {
       displayMessage = "パートナーの接続を待っています...";
+    } else if (!isExperimentStarted) {
+      // ★ 実験開始前のメッセージ
+      displayMessage = userId == 'user_1' ? "計測を開始してください" : "実験開始待機中...";
     } else if (isCoolingDown) {
       // ★ クールダウン中のメッセージ
       displayMessage = "到着後の待機時間です。\nあと ${remainingCooldown.value} 秒...";
@@ -354,28 +412,32 @@ class HomeScreen extends HookConsumerWidget {
               height: 80,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: isCoolingDown
-                    ? Colors.grey.shade300 // ★ クールダウン中の色
-                    : (!isSystemReady ||
-                            (!isAtValidStartLocation && !isRobotBusy)
-                        ? Colors.grey.shade300
-                        : (uiMode == 'route'
-                            ? Colors.purple.shade50
-                            : (robotStatus == 'moving'
-                                ? Colors.orange.shade100
-                                : Colors.blue.shade50))),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: isCoolingDown
-                        ? Colors.grey.shade500
+                color: !isExperimentStarted
+                    ? Colors.grey.shade300
+                    : (isCoolingDown
+                        ? Colors.grey.shade300 // ★ クールダウン中の色
                         : (!isSystemReady ||
                                 (!isAtValidStartLocation && !isRobotBusy)
-                            ? Colors.grey.shade500
+                            ? Colors.grey.shade300
                             : (uiMode == 'route'
-                                ? Colors.purple.shade300
+                                ? Colors.purple.shade50
                                 : (robotStatus == 'moving'
-                                    ? Colors.orange.shade300
-                                    : Colors.blue.shade200))),
+                                    ? Colors.orange.shade100
+                                    : Colors.blue.shade50)))),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: !isExperimentStarted
+                        ? Colors.grey.shade500
+                        : (isCoolingDown
+                            ? Colors.grey.shade500
+                            : (!isSystemReady ||
+                                    (!isAtValidStartLocation && !isRobotBusy)
+                                ? Colors.grey.shade500
+                                : (uiMode == 'route'
+                                    ? Colors.purple.shade300
+                                    : (robotStatus == 'moving'
+                                        ? Colors.orange.shade300
+                                        : Colors.blue.shade200)))),
                     width: 2),
               ),
               alignment: Alignment.center,
@@ -385,6 +447,7 @@ class HomeScreen extends HookConsumerWidget {
                 style: TextStyle(
                     fontSize: 16,
                     color: !isSystemReady ||
+                            !isExperimentStarted ||
                             (!isAtValidStartLocation && !isRobotBusy) ||
                             isCoolingDown
                         ? Colors.black54
@@ -442,6 +505,7 @@ class HomeScreen extends HookConsumerWidget {
                                     userId == destinationSelector &&
                                     isAtValidStartLocation &&
                                     isSystemReady &&
+                                    isExperimentStarted && // ★ 追加
                                     !isCoolingDown) {
                                   sendRequest(e);
                                 }
