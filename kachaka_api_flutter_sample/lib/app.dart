@@ -32,6 +32,7 @@ class KachakaApiSampleApp extends HookConsumerWidget {
     }, const []);
 
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Kachaka Api Sample',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
